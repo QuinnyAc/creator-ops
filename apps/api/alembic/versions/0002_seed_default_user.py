@@ -43,6 +43,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         sa.text("DELETE FROM users WHERE id = :user_id").bindparams(
-            user_id=str(DEFAULT_USER_ID)
+            sa.bindparam(
+                "user_id",
+                value=DEFAULT_USER_ID,
+                type_=postgresql.UUID(as_uuid=True),
+            )
         )
     )
