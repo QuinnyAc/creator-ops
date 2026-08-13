@@ -5,8 +5,8 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { ErrorBanner, LoadingBlock, PageHeader, Section } from "@/components/ui";
-import { api, patchJson } from "@/lib/api";
-import type { ContentItem } from "@/lib/types";
+import { api, patchJson, putJson } from "@/lib/api";
+import type { ContentItem, Tag } from "@/lib/types";
 
 const STATUSES = ["research", "outline", "script", "shooting", "editing", "ready", "published", "review"];
 
@@ -33,6 +33,8 @@ export default function ContentWorkspacePage() {
   const contentId = params.id;
   const [content, setContent] = useState<ContentItem | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -42,8 +44,14 @@ export default function ContentWorkspacePage() {
     setLoading(true);
     setError("");
     try {
-      const item = await api<ContentItem>(`/contents/${contentId}`);
+      const [item, allTags, assignedTags] = await Promise.all([
+        api<ContentItem>(`/contents/${contentId}`),
+        api<Tag[]>("/tags"),
+        api<Tag[]>(`/contents/${contentId}/tags`),
+      ]);
       setContent(item);
+      setTags(allTags);
+      setSelectedTagIds(assignedTags.map((tag) => tag.id));
       setDraft({
         title: item.title,
         status: item.status,
@@ -65,6 +73,12 @@ export default function ContentWorkspacePage() {
     void load();
   }, [load]);
 
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((current) =>
+      current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId],
+    );
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!draft) return;
@@ -72,16 +86,19 @@ export default function ContentWorkspacePage() {
     setSaved(false);
     setError("");
     try {
-      const updated = await patchJson<ContentItem>(`/contents/${contentId}`, {
-        title: draft.title.trim(),
-        status: draft.status,
-        research_notes: draft.research_notes || null,
-        outline: draft.outline || null,
-        script: draft.script || null,
-        copywriting: draft.copywriting || null,
-        cta: draft.cta || null,
-        planned_publish_at: draft.planned_publish_at ? new Date(draft.planned_publish_at).toISOString() : null,
-      });
+      const [updated] = await Promise.all([
+        patchJson<ContentItem>(`/contents/${contentId}`, {
+          title: draft.title.trim(),
+          status: draft.status,
+          research_notes: draft.research_notes || null,
+          outline: draft.outline || null,
+          script: draft.script || null,
+          copywriting: draft.copywriting || null,
+          cta: draft.cta || null,
+          planned_publish_at: draft.planned_publish_at ? new Date(draft.planned_publish_at).toISOString() : null,
+        }),
+        putJson<Tag[]>(`/contents/${contentId}/tags`, { tag_ids: selectedTagIds }),
+      ]);
       setContent(updated);
       setSaved(true);
     } catch (err) {
@@ -98,13 +115,13 @@ export default function ContentWorkspacePage() {
       <PageHeader
         eyebrow="CONTENT WORKSPACE"
         title={content?.title ?? "内容工作区"}
-        description="研究、大纲、脚本、文案和 CTA 都属于同一个内容资产。"
+        description="研究、大纲、脚本、文案、标签和 CTA 都属于同一个内容资产。"
         action={<Link className="button secondary" href="/content">← 返回 Pipeline</Link>}
       />
       {error ? <ErrorBanner message={error} /> : null}
       {!draft ? null : (
         <form className="stack" onSubmit={save}>
-          <Section title="Overview" description="控制内容生命周期和计划发布时间。">
+          <Section title="Overview" description="控制内容生命周期、计划发布时间和描述性标签。">
             <div className="formGrid three">
               <div className="field">
                 <label htmlFor="workspace-title">标题</label>
@@ -119,6 +136,28 @@ export default function ContentWorkspacePage() {
               <div className="field">
                 <label htmlFor="workspace-date">计划发布时间</label>
                 <input id="workspace-date" className="input" type="datetime-local" value={draft.planned_publish_at} onChange={(e) => setDraft({ ...draft, planned_publish_at: e.target.value })} />
+              </div>
+              <div className="field full">
+                <label>Tags</label>
+                {tags.length === 0 ? (
+                  <p className="dataRowMeta">暂无标签。可以先到“设置”创建。</p>
+                ) : (
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                    {tags.map((tag) => {
+                      const active = selectedTagIds.includes(tag.id);
+                      return (
+                        <button
+                          className={`button small ${active ? "" : "secondary"}`}
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.id)}
+                        >
+                          #{tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </Section>

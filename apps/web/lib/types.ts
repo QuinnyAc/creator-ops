@@ -17,6 +17,22 @@ export type AnalyticsSummary = {
   engagement_rate: number;
 };
 
+export type PillarAnalyticsItem = {
+  pillar_id: string;
+  pillar_name: string;
+  publications: number;
+  views: number;
+  likes: number;
+  comments: number;
+  favorites: number;
+  shares: number;
+  followers_gained: number;
+  avg_views: number;
+  engagement_rate: number;
+  favorite_rate: number;
+  follower_conversion_rate: number;
+};
+
 export type Inspiration = {
   id: string;
   user_id: string;

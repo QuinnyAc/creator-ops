@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PlusIcon } from "@/components/icons";
 import { Badge, EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
 import { ApiError, api, patchJson, postJson, putJson } from "@/lib/api";
-import type { ContentPillar, Topic, TopicScore } from "@/lib/types";
+import type { ContentPillar, Tag, Topic, TopicScore } from "@/lib/types";
 
 const SCORE_FIELDS = [
   ["pain_point", "用户痛点"],
@@ -29,6 +29,7 @@ const DEFAULT_SCORE: ScoreForm = {
 export default function TopicsPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [title, setTitle] = useState("");
   const [coreIdea, setCoreIdea] = useState("");
   const [pillarId, setPillarId] = useState("");
@@ -36,28 +37,31 @@ export default function TopicsPage() {
   const [selected, setSelected] = useState<Topic | null>(null);
   const [score, setScore] = useState<ScoreForm>(DEFAULT_SCORE);
   const [savedScore, setSavedScore] = useState<TopicScore | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [nextTopics, nextPillars] = await Promise.all([
+      const [nextTopics, nextPillars, nextTags] = await Promise.all([
         api<Topic[]>("/topics"),
         api<ContentPillar[]>("/content-pillars"),
+        api<Tag[]>("/tags"),
       ]);
       setTopics(nextTopics);
       setPillars(nextPillars);
-      if (selected) {
-        setSelected(nextTopics.find((topic) => topic.id === selected.id) ?? null);
-      }
+      setTags(nextTags);
+      setSelected((current) =>
+        current ? nextTopics.find((topic) => topic.id === current.id) ?? null : null,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "选题加载失败");
     }
-  }, [selected]);
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load]);
 
   const pillarMap = useMemo(
     () => new Map(pillars.map((pillar) => [pillar.id, pillar.name])),
@@ -100,8 +104,22 @@ export default function TopicsPage() {
     setSelected(topic);
     setSavedScore(null);
     setScore(DEFAULT_SCORE);
-    try {
-      const existing = await api<TopicScore>(`/topics/${topic.id}/score`);
+    setSelectedTagIds([]);
+    setError("");
+
+    const [tagResult, scoreResult] = await Promise.allSettled([
+      api<Tag[]>(`/topics/${topic.id}/tags`),
+      api<TopicScore>(`/topics/${topic.id}/score`),
+    ]);
+
+    if (tagResult.status === "fulfilled") {
+      setSelectedTagIds(tagResult.value.map((tag) => tag.id));
+    } else {
+      setError(tagResult.reason instanceof Error ? tagResult.reason.message : "标签加载失败");
+    }
+
+    if (scoreResult.status === "fulfilled") {
+      const existing = scoreResult.value;
       setSavedScore(existing);
       setScore({
         pain_point: existing.pain_point,
@@ -111,23 +129,30 @@ export default function TopicsPage() {
         commercial_value: existing.commercial_value,
         production_effort: existing.production_effort,
       });
-    } catch (err) {
-      if (!(err instanceof ApiError && err.status === 404)) {
-        setError(err instanceof Error ? err.message : "评分加载失败");
-      }
+    } else if (!(scoreResult.reason instanceof ApiError && scoreResult.reason.status === 404)) {
+      setError(scoreResult.reason instanceof Error ? scoreResult.reason.message : "评分加载失败");
     }
   }
 
-  async function saveScore() {
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((current) =>
+      current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId],
+    );
+  }
+
+  async function saveDecision() {
     if (!selected) return;
     setSaving(true);
     setError("");
     try {
-      const result = await putJson<TopicScore>(`/topics/${selected.id}/score`, score);
+      const [result] = await Promise.all([
+        putJson<TopicScore>(`/topics/${selected.id}/score`, score),
+        putJson<Tag[]>(`/topics/${selected.id}/tags`, { tag_ids: selectedTagIds }),
+      ]);
       setSavedScore(result);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "评分保存失败");
+      setError(err instanceof Error ? err.message : "评分或标签保存失败");
     } finally {
       setSaving(false);
     }
@@ -196,7 +221,7 @@ export default function TopicsPage() {
                           {['evaluating','approved','scheduled','in_production','completed','rejected','archived'].map((value) => <option key={value} value={value}>{value}</option>)}
                         </select>
                       </td>
-                      <td><button className="button small secondary" onClick={() => void openScore(topic)}>评分</button></td>
+                      <td><button className="button small secondary" type="button" onClick={() => void openScore(topic)}>决策</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -205,9 +230,9 @@ export default function TopicsPage() {
           )}
         </Section>
 
-        <Section title="选题评分" description={selected ? selected.title : "选择一个选题后，在这里判断机会和投入。"}>
+        <Section title="选题决策" description={selected ? selected.title : "选择一个选题后，在这里判断机会、投入和内容标签。"}>
           {!selected ? (
-            <EmptyState>从左侧选题表点击“评分”。</EmptyState>
+            <EmptyState>从左侧选题表点击“决策”。</EmptyState>
           ) : (
             <>
               <div className="scoreGrid">
@@ -224,12 +249,38 @@ export default function TopicsPage() {
                   </div>
                 ))}
               </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div className="field">
+                  <label>Tags</label>
+                  {tags.length === 0 ? (
+                    <p className="dataRowMeta">还没有标签，可先到“设置”创建。</p>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                      {tags.map((tag) => {
+                        const active = selectedTagIds.includes(tag.id);
+                        return (
+                          <button
+                            className={`button small ${active ? "" : "secondary"}`}
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleTag(tag.id)}
+                          >
+                            #{tag.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="scoreResult">
                 <div><span>Opportunity</span><strong>{savedScore ? Number(savedScore.opportunity_score).toFixed(0) : "—"}</strong></div>
                 <div><span>Priority</span><strong>{savedScore ? Number(savedScore.priority_score).toFixed(0) : "—"}</strong></div>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-                <button className="button" disabled={saving} onClick={() => void saveScore()}>{saving ? "计算中…" : "保存并计算"}</button>
+                <button className="button" type="button" disabled={saving} onClick={() => void saveDecision()}>{saving ? "计算中…" : "保存决策"}</button>
               </div>
               {savedScore ? <div style={{ marginTop: 12 }}><Badge value={Number(savedScore.priority_score) >= 70 ? "approved" : "evaluating"} /></div> : null}
             </>

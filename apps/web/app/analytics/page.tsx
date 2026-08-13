@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmptyState, ErrorBanner, PageHeader, Section, StatCard, formatDate, formatNumber } from "@/components/ui";
 import { api, postJson } from "@/lib/api";
-import type { AnalyticsSummary, ContentItem, MetricSnapshot, Publication } from "@/lib/types";
+import type { AnalyticsSummary, ContentItem, MetricSnapshot, PillarAnalyticsItem, Publication } from "@/lib/types";
 
 function localNow() {
   const date = new Date();
@@ -24,6 +24,7 @@ const EMPTY_SUMMARY: AnalyticsSummary = {
 
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [pillarAnalytics, setPillarAnalytics] = useState<PillarAnalyticsItem[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -40,12 +41,14 @@ export default function AnalyticsPage() {
 
   const loadOverview = useCallback(async () => {
     try {
-      const [nextSummary, nextPublications, nextContents] = await Promise.all([
+      const [nextSummary, nextPillars, nextPublications, nextContents] = await Promise.all([
         api<AnalyticsSummary>("/analytics/summary"),
+        api<PillarAnalyticsItem[]>("/analytics/pillars"),
         api<Publication[]>("/publications"),
         api<ContentItem[]>("/contents"),
       ]);
       setSummary(nextSummary);
+      setPillarAnalytics(nextPillars);
       setPublications(nextPublications);
       setContents(nextContents);
       setSelectedId((current) => current || nextPublications[0]?.id || "");
@@ -119,6 +122,33 @@ export default function AnalyticsPage() {
         <StatCard label="涨粉" value={formatNumber(summary.followers_gained)} />
         <StatCard label="互动率" value={`${summary.engagement_rate}%`} hint="(赞+评+藏+分享) / 浏览" />
       </div>
+
+      <Section title="哪些内容方向表现最好？" description="按 Content Pillar 聚合每个发布实例的最新数据快照。">
+        {pillarAnalytics.length === 0 ? (
+          <EmptyState>还没有可按内容支柱分析的数据。给 Content 设置 Pillar 并记录发布数据后，这里会开始形成方法论。</EmptyState>
+        ) : (
+          <div className="tableWrap">
+            <table className="table">
+              <thead><tr><th>Content Pillar</th><th>发布</th><th>平均浏览</th><th>互动率</th><th>收藏率</th><th>转粉率</th><th>总浏览</th></tr></thead>
+              <tbody>
+                {pillarAnalytics.map((item) => (
+                  <tr key={item.pillar_id}>
+                    <td><div className="tableTitle">{item.pillar_name}</div></td>
+                    <td>{item.publications}</td>
+                    <td>{formatNumber(Math.round(item.avg_views))}</td>
+                    <td className="score">{item.engagement_rate}%</td>
+                    <td className="score">{item.favorite_rate}%</td>
+                    <td className="score high">{item.follower_conversion_rate}%</td>
+                    <td>{formatNumber(item.views)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
 
       <div className="splitGrid">
         <form className="formCard" onSubmit={submit}>
