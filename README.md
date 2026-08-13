@@ -1,63 +1,109 @@
 # Creator Ops
 
-Open-source creator operations management system.
+> An open-source creator operations workspace — from idea to insight.
 
-Creator Ops is a one-stop workspace for individual creators and small content teams to manage the full content production loop:
+Creator Ops helps individual creators and small content teams manage the full content production loop in one place:
 
-`Inspiration -> Topic -> Content -> Publication -> Metrics -> Review`
+**Inspiration → Topic → Content → Publication → Metrics → Review → Better next topic**
 
-## Project status
+It is intentionally not another generic Notion-style database. The product understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, and the learning produced by a review.
 
-Early MVP development. The repository now contains the initial product architecture, PostgreSQL domain schema, FastAPI application bootstrap, Alembic migration, and Docker Compose development environment.
+## Current MVP
 
-## Stack
+The repository now includes a working first-pass product architecture for:
 
-- Next.js + React + TypeScript
-- FastAPI + Python
-- PostgreSQL
-- SQLAlchemy + Alembic
-- Docker / Docker Compose
-- GitHub Actions
+- low-friction inspiration inbox;
+- structured topic database and weighted topic scoring;
+- content production Kanban and per-content workspace;
+- multi-platform account and publication management;
+- manual metric snapshots for longitudinal analytics;
+- structured content reviews;
+- dashboard summaries;
+- content pillars and tags;
+- Docker-based local development;
+- PostgreSQL migrations and GitHub Actions CI.
+
+Initial platform catalog:
+
+- Xiaohongshu
+- Bilibili
+- WeChat Official Accounts
+- YouTube
+
+## Product loop
+
+```text
+Inspiration
+    ↓
+Topic + Score
+    ↓
+Content Workspace
+    ↓
+Publication(s)
+    ↓
+Metric Snapshots
+    ↓
+Review
+    ↓
+Learning → Next Topic
+```
+
+A single `Content` can have multiple `Publication` records. That is important because the same core idea may be adapted to several platforms with different titles, schedules, links, and performance data.
+
+## Tech stack
+
+| Layer | Choice |
+| --- | --- |
+| Web | Next.js + React + TypeScript |
+| API | FastAPI + Python |
+| Database | PostgreSQL |
+| ORM / migrations | SQLAlchemy + Alembic |
+| Local runtime | Docker Compose |
+| CI | GitHub Actions |
 
 ## Repository structure
 
 ```text
 creator-ops/
 ├── apps/
-│   ├── web/          # Next.js frontend
-│   └── api/          # FastAPI backend
-├── docker/           # Container/deployment helpers
-├── docs/             # Product and engineering documentation
+│   ├── web/                 # Next.js creator workspace
+│   └── api/                 # FastAPI REST API
+├── docs/                    # Architecture, database, API and brand docs
+├── .github/                 # CI, issue templates and PR template
 ├── docker-compose.yml
+├── Makefile
 ├── .env.example
-├── .editorconfig
-├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
-## Local development
+## Run locally
 
-Copy the example environment file:
+Requirements: Docker with Compose support.
 
 ```bash
 cp .env.example .env
-```
-
-Start PostgreSQL and the API:
-
-```bash
 docker compose up --build
 ```
 
-The API will be available at:
+Then open:
 
+- Creator workspace: `http://localhost:3000`
 - API: `http://localhost:8000`
-- Health: `http://localhost:8000/health`
-- Swagger: `http://localhost:8000/docs`
+- Swagger API docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
 
-Docker Compose runs `alembic upgrade head` before starting the FastAPI development server.
+The API container applies `alembic upgrade head` before starting.
 
-To run the API without Docker:
+To reset all local PostgreSQL data:
+
+```bash
+docker compose down -v
+```
+
+## Run without Docker
+
+Backend:
 
 ```bash
 cd apps/api
@@ -68,42 +114,81 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Run backend tests:
+Frontend:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+## Test
+
+Backend:
 
 ```bash
 cd apps/api
 pytest
 ```
 
-## Domain model
+Frontend:
 
-The core domain chain is:
-
-```text
-Inspiration
-  -> Topic
-  -> Content
-  -> Publication
-  -> MetricSnapshot
-  -> Review
+```bash
+cd apps/web
+npm run typecheck
+npm run build
 ```
 
-A content asset and a platform publication are deliberately different entities so one piece of content can be adapted to multiple accounts and platforms.
+GitHub Actions also verifies Python compilation, migration upgrade/downgrade, backend tests, frontend type checking, and the production web build.
 
-See:
+## Important MVP limitation
 
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/database.md`](docs/database.md)
+Authentication is intentionally deferred while the single-user creator workflow is validated. A fixed local creator is seeded by the database migration. **Do not expose the current MVP directly as a public multi-tenant production service.** Authentication and authorization are required before that step.
 
-## MVP roadmap
+## Documentation
 
-1. Topic management and scoring
-2. Content production pipeline
-3. Publication management
-4. Manual analytics recording
-5. Structured content reviews
-6. Creator dashboard
+- [Architecture](docs/architecture.md)
+- [Database design](docs/database.md)
+- [API overview](docs/api.md)
+- [Brand direction](docs/branding.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
-## License
+## Roadmap
 
-License selection is pending.
+### P0 — workflow MVP
+
+- [x] Inspiration inbox
+- [x] Topic scoring
+- [x] Content pipeline
+- [x] Content workspace
+- [x] Publication management
+- [x] Manual analytics snapshots
+- [x] Structured reviews
+- [x] Dashboard
+- [ ] Authentication
+- [ ] End-to-end integration tests
+
+### P1 — creator analytics
+
+- [ ] Topic / pillar performance comparisons
+- [ ] Title pattern analysis
+- [ ] 24h / 72h / 7d / 30d performance views
+- [ ] Publishing calendar view
+- [ ] CSV import / export
+- [ ] Better tag relationships in the UI
+
+### P2 — creator intelligence
+
+- [ ] Platform data integrations
+- [ ] AI-assisted review
+- [ ] AI topic scoring suggestions
+- [ ] Creator Playbook / reusable insights
+- [ ] Team collaboration
+- [ ] Browser extension and automation hooks
+
+## Open source
+
+Creator Ops is released under the [MIT License](LICENSE).
+
+Commercial hosting and advanced managed features can be built on top of the open-source core without changing the goal of keeping the essential creator workflow self-hostable.
