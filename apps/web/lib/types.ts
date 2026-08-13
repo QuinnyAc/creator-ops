@@ -33,6 +33,19 @@ export type PillarAnalyticsItem = {
   follower_conversion_rate: number;
 };
 
+export type PerformanceMilestone = {
+  label: string;
+  target_hours: number;
+  target_at: string | null;
+  captured_at: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  favorites: number | null;
+  shares: number | null;
+  followers_gained: number | null;
+};
+
 export type Inspiration = {
   id: string;
   user_id: string;

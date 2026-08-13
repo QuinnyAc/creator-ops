@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmptyState, ErrorBanner, PageHeader, Section, StatCard, formatDate, formatNumber } from "@/components/ui";
 import { api, postJson } from "@/lib/api";
-import type { AnalyticsSummary, ContentItem, MetricSnapshot, PillarAnalyticsItem, Publication } from "@/lib/types";
+import type { AnalyticsSummary, ContentItem, MetricSnapshot, PerformanceMilestone, PillarAnalyticsItem, Publication } from "@/lib/types";
 
 function localNow() {
   const date = new Date();
@@ -29,6 +29,7 @@ export default function AnalyticsPage() {
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [metrics, setMetrics] = useState<MetricSnapshot[]>([]);
+  const [milestones, setMilestones] = useState<PerformanceMilestone[]>([]);
   const [capturedAt, setCapturedAt] = useState(localNow());
   const [views, setViews] = useState("0");
   const [likes, setLikes] = useState("0");
@@ -57,15 +58,21 @@ export default function AnalyticsPage() {
     }
   }, []);
 
-  const loadMetrics = useCallback(async (publicationId: string) => {
+  const loadPublicationAnalytics = useCallback(async (publicationId: string) => {
     if (!publicationId) {
       setMetrics([]);
+      setMilestones([]);
       return;
     }
     try {
-      setMetrics(await api<MetricSnapshot[]>(`/analytics/publications/${publicationId}/metrics`));
+      const [nextMetrics, nextMilestones] = await Promise.all([
+        api<MetricSnapshot[]>(`/analytics/publications/${publicationId}/metrics`),
+        api<PerformanceMilestone[]>(`/analytics/publications/${publicationId}/milestones`),
+      ]);
+      setMetrics(nextMetrics);
+      setMilestones(nextMilestones);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "数据快照加载失败");
+      setError(err instanceof Error ? err.message : "发布表现加载失败");
     }
   }, []);
 
@@ -74,8 +81,8 @@ export default function AnalyticsPage() {
   }, [loadOverview]);
 
   useEffect(() => {
-    void loadMetrics(selectedId);
-  }, [selectedId, loadMetrics]);
+    void loadPublicationAnalytics(selectedId);
+  }, [selectedId, loadPublicationAnalytics]);
 
   const contentMap = useMemo(() => new Map(contents.map((item) => [item.id, item])), [contents]);
   const selectedPublication = publications.find((item) => item.id === selectedId);
@@ -98,7 +105,7 @@ export default function AnalyticsPage() {
         extra_metrics: {},
       });
       setCapturedAt(localNow());
-      await Promise.all([loadMetrics(selectedId), loadOverview()]);
+      await Promise.all([loadPublicationAnalytics(selectedId), loadOverview()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "数据保存失败");
     } finally {
@@ -197,6 +204,29 @@ export default function AnalyticsPage() {
           )}
         </Section>
       </div>
+
+      <Section title="发布后关键时间窗口" description="里程碑使用发布后达到目标时间的第一条数据快照；没有对应快照时保持为空，不猜测数据。">
+        {!selectedPublication?.published_at ? (
+          <EmptyState>这条 Publication 还没有实际发布时间，因此暂时无法计算 24h / 72h / 7d / 30d。</EmptyState>
+        ) : (
+          <div className="metricGrid">
+            {milestones.map((item) => (
+              <div className="metricBox" key={item.label}>
+                <span>{item.label} · 浏览</span>
+                <strong>{item.views == null ? "—" : formatNumber(item.views)}</strong>
+                <div className="dataRowMeta" style={{ marginTop: 7 }}>
+                  收藏 {item.favorites == null ? "—" : formatNumber(item.favorites)} · 涨粉 {item.followers_gained == null ? "—" : formatNumber(item.followers_gained)}
+                </div>
+                <div className="dataRowMeta" style={{ marginTop: 3 }}>
+                  {item.captured_at ? `采集 ${formatDate(item.captured_at)}` : `目标 ${formatDate(item.target_at)}`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
 
       <Section title="历史快照" description="保留增长曲线所需要的时间序列，而不是覆盖上一组数字。">
         {metrics.length === 0 ? (
