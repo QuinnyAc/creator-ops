@@ -1,13 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.db import get_db
-from app.models import Content, ContentPillar, Topic
-from app.schemas import ContentCreate, ContentRead, ContentUpdate
+from app.models import Content, ContentPillar, Tag, Topic, content_tags
+from app.schemas import ContentCreate, ContentRead, ContentUpdate, TagRead
+from app.schemas_taxonomy import TagAssignment
+from app.services.taxonomy import get_owned_tags
 
 router = APIRouter(prefix="/contents", tags=["contents"])
 
@@ -114,3 +116,39 @@ def delete_content(
     db.delete(item)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{content_id}/tags", response_model=list[TagRead])
+def list_content_tags(
+    content_id: UUID,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[Tag]:
+    _get_owned(db, content_id, user_id)
+    return list(
+        db.scalars(
+            select(Tag)
+            .join(content_tags, content_tags.c.tag_id == Tag.id)
+            .where(content_tags.c.content_id == content_id, Tag.user_id == user_id)
+            .order_by(Tag.name)
+        )
+    )
+
+
+@router.put("/{content_id}/tags", response_model=list[TagRead])
+def replace_content_tags(
+    content_id: UUID,
+    payload: TagAssignment,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[Tag]:
+    _get_owned(db, content_id, user_id)
+    tags = get_owned_tags(db, payload.tag_ids, user_id)
+    db.execute(delete(content_tags).where(content_tags.c.content_id == content_id))
+    if tags:
+        db.execute(
+            insert(content_tags),
+            [{"content_id": content_id, "tag_id": tag.id} for tag in tags],
+        )
+    db.commit()
+    return tags

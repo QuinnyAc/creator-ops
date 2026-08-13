@@ -1,13 +1,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.db import get_db
-from app.models import ContentPillar, Topic, TopicScore
+from app.models import ContentPillar, Tag, Topic, TopicScore, topic_tags
 from app.schemas import (
+    TagRead,
     TopicCreate,
     TopicListItem,
     TopicRead,
@@ -15,7 +16,9 @@ from app.schemas import (
     TopicScoreRead,
     TopicUpdate,
 )
+from app.schemas_taxonomy import TagAssignment
 from app.services.scoring import calculate_topic_scores
+from app.services.taxonomy import get_owned_tags
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 
@@ -112,6 +115,42 @@ def delete_topic(
     db.delete(item)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{topic_id}/tags", response_model=list[TagRead])
+def list_topic_tags(
+    topic_id: UUID,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[Tag]:
+    _get_owned(db, topic_id, user_id)
+    return list(
+        db.scalars(
+            select(Tag)
+            .join(topic_tags, topic_tags.c.tag_id == Tag.id)
+            .where(topic_tags.c.topic_id == topic_id, Tag.user_id == user_id)
+            .order_by(Tag.name)
+        )
+    )
+
+
+@router.put("/{topic_id}/tags", response_model=list[TagRead])
+def replace_topic_tags(
+    topic_id: UUID,
+    payload: TagAssignment,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[Tag]:
+    _get_owned(db, topic_id, user_id)
+    tags = get_owned_tags(db, payload.tag_ids, user_id)
+    db.execute(delete(topic_tags).where(topic_tags.c.topic_id == topic_id))
+    if tags:
+        db.execute(
+            insert(topic_tags),
+            [{"topic_id": topic_id, "tag_id": tag.id} for tag in tags],
+        )
+    db.commit()
+    return tags
 
 
 @router.put("/{topic_id}/score", response_model=TopicScoreRead)
