@@ -23,6 +23,7 @@ const nav = [
   { href: "/content", label: "内容 Pipeline", icon: PipelineIcon },
   { href: "/publishing", label: "发布管理", icon: CalendarIcon },
   { href: "/analytics", label: "数据分析", icon: ChartIcon },
+  { href: "/analytics/titles", label: "标题分析", icon: ChartIcon },
   { href: "/reviews", label: "内容复盘", icon: ReviewIcon },
   { href: "/settings", label: "设置", icon: SettingsIcon },
 ];
@@ -66,7 +67,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="nav">
           {nav.map(({ href, label, icon: Icon }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const active = href === "/" || href === "/analytics"
+              ? pathname === href
+              : pathname.startsWith(href);
             return (
               <Link key={href} className={`navItem ${active ? "active" : ""}`} href={href}>
                 <Icon />
