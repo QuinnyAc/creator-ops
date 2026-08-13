@@ -1,4 +1,5 @@
 from functools import lru_cache
+from uuid import UUID
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
         "postgresql+psycopg://creator_ops:creator_ops@localhost:5432/creator_ops"
     )
     cors_origins: str = "http://localhost:3000"
+    default_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
 
     model_config = SettingsConfigDict(
         env_file=".env",
