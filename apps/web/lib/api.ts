@@ -1,3 +1,5 @@
+import { getAccessToken } from "@/lib/auth";
+
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const API_ROOT = `${API_ORIGIN.replace(/\/$/, "")}/api/v1`;
 
@@ -12,13 +14,20 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type") && init?.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const token = getAccessToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
     cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
 
   if (response.status === 204) {

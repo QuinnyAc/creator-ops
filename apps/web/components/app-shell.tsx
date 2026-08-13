@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   CalendarIcon,
@@ -14,6 +14,7 @@ import {
   SparkIcon,
   TopicIcon,
 } from "@/components/icons";
+import { clearAccessToken, getAccessToken } from "@/lib/auth";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: HomeIcon },
@@ -28,6 +29,30 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [authenticated, setAuthenticated] = useState(false);
+  const requireAuth = process.env.NEXT_PUBLIC_REQUIRE_AUTH === "true";
+
+  useEffect(() => {
+    const hasToken = Boolean(getAccessToken());
+    setAuthenticated(hasToken);
+    if (requireAuth && !hasToken && pathname !== "/login") {
+      window.location.assign("/login");
+    }
+  }, [pathname, requireAuth]);
+
+  if (pathname === "/login") {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "var(--bg)" }}>
+        {children}
+      </main>
+    );
+  }
+
+  function logout() {
+    clearAccessToken();
+    setAuthenticated(false);
+    window.location.assign("/login");
+  }
 
   return (
     <div className="shell">
@@ -52,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebarFooter">
           <span className="statusDot" />
-          Local MVP workspace
+          {authenticated ? "Authenticated workspace" : "Local MVP workspace"}
         </div>
       </aside>
       <main className="workspace">
@@ -63,7 +88,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="creatorChip">
             <span>C</span>
-            Creator
+            {authenticated ? (
+              <button
+                type="button"
+                onClick={logout}
+                style={{ border: 0, background: "transparent", padding: 0, color: "inherit", fontSize: 12 }}
+              >
+                退出
+              </button>
+            ) : (
+              <Link href="/login">登录</Link>
+            )}
           </div>
         </header>
         <div className="page">{children}</div>
