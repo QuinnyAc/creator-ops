@@ -1,0 +1,73 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
+
+import {
+  CalendarIcon,
+  ChartIcon,
+  HomeIcon,
+  PipelineIcon,
+  ReviewIcon,
+  SettingsIcon,
+  SparkIcon,
+  TopicIcon,
+} from "@/components/icons";
+
+const nav = [
+  { href: "/", label: "Dashboard", icon: HomeIcon },
+  { href: "/inspirations", label: "灵感 Inbox", icon: SparkIcon },
+  { href: "/topics", label: "选题库", icon: TopicIcon },
+  { href: "/content", label: "内容 Pipeline", icon: PipelineIcon },
+  { href: "/publishing", label: "发布管理", icon: CalendarIcon },
+  { href: "/analytics", label: "数据分析", icon: ChartIcon },
+  { href: "/reviews", label: "内容复盘", icon: ReviewIcon },
+  { href: "/settings", label: "设置", icon: SettingsIcon },
+];
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brandMark">CO</div>
+          <div>
+            <strong>Creator Ops</strong>
+            <span>Content operating system</span>
+          </div>
+        </div>
+        <nav className="nav">
+          {nav.map(({ href, label, icon: Icon }) => {
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            return (
+              <Link key={href} className={`navItem ${active ? "active" : ""}`} href={href}>
+                <Icon />
+                <span>{label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="sidebarFooter">
+          <span className="statusDot" />
+          Local MVP workspace
+        </div>
+      </aside>
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <span className="eyebrow">CREATOR OPERATIONS</span>
+            <strong>把每一次创作变成可复用的增长经验</strong>
+          </div>
+          <div className="creatorChip">
+            <span>C</span>
+            Creator
+          </div>
+        </header>
+        <div className="page">{children}</div>
+      </main>
+    </div>
+  );
+}
