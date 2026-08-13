@@ -1,0 +1,31 @@
+[project]
+name = "creator-ops-api"
+version = "0.1.0"
+description = "FastAPI backend for Creator Ops"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14",
+  "fastapi>=0.115",
+  "psycopg[binary]>=3.2",
+  "pydantic-settings>=2.7",
+  "sqlalchemy>=2.0",
+  "uvicorn[standard]>=0.34",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28",
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
