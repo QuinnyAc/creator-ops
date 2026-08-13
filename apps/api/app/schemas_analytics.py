@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -17,3 +18,16 @@ class PillarAnalyticsItem(BaseModel):
     engagement_rate: float
     favorite_rate: float
     follower_conversion_rate: float
+
+
+class PerformanceMilestone(BaseModel):
+    label: str
+    target_hours: int
+    target_at: datetime | None
+    captured_at: datetime | None
+    views: int | None
+    likes: int | None
+    comments: int | None
+    favorites: int | None
+    shares: int | None
+    followers_gained: int | None

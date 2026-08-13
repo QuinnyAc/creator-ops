@@ -1,3 +1,4 @@
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,9 +9,16 @@ from app.api.deps import get_current_user_id
 from app.db import get_db
 from app.models import Content, ContentPillar, MetricSnapshot, Publication
 from app.schemas import AnalyticsSummary, MetricSnapshotCreate, MetricSnapshotRead
-from app.schemas_analytics import PillarAnalyticsItem
+from app.schemas_analytics import PerformanceMilestone, PillarAnalyticsItem
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+MILESTONES = [
+    ("24h", 24),
+    ("72h", 72),
+    ("7d", 24 * 7),
+    ("30d", 24 * 30),
+]
 
 
 def _latest_metric_snapshot_subquery():
@@ -33,14 +41,19 @@ def _latest_metric_snapshot_subquery():
     )
 
 
-def _ensure_owned_publication(db: Session, publication_id: UUID, user_id: UUID) -> None:
-    owned = db.scalar(
-        select(Publication.id)
+def _get_owned_publication(
+    db: Session,
+    publication_id: UUID,
+    user_id: UUID,
+) -> Publication:
+    publication = db.scalar(
+        select(Publication)
         .join(Content, Content.id == Publication.content_id)
         .where(Publication.id == publication_id, Content.user_id == user_id)
     )
-    if owned is None:
+    if publication is None:
         raise HTTPException(status_code=404, detail="Publication not found.")
+    return publication
 
 
 @router.get("/publications/{publication_id}/metrics", response_model=list[MetricSnapshotRead])
@@ -49,7 +62,7 @@ def list_metrics(
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ) -> list[MetricSnapshot]:
-    _ensure_owned_publication(db, publication_id, user_id)
+    _get_owned_publication(db, publication_id, user_id)
     return list(
         db.scalars(
             select(MetricSnapshot)
@@ -70,12 +83,61 @@ def create_metric_snapshot(
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ) -> MetricSnapshot:
-    _ensure_owned_publication(db, publication_id, user_id)
+    _get_owned_publication(db, publication_id, user_id)
     snapshot = MetricSnapshot(publication_id=publication_id, **payload.model_dump())
     db.add(snapshot)
     db.commit()
     db.refresh(snapshot)
     return snapshot
+
+
+@router.get(
+    "/publications/{publication_id}/milestones",
+    response_model=list[PerformanceMilestone],
+)
+def publication_milestones(
+    publication_id: UUID,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[PerformanceMilestone]:
+    publication = _get_owned_publication(db, publication_id, user_id)
+    snapshots = list(
+        db.scalars(
+            select(MetricSnapshot)
+            .where(MetricSnapshot.publication_id == publication_id)
+            .order_by(MetricSnapshot.captured_at.asc())
+        )
+    )
+
+    result: list[PerformanceMilestone] = []
+    for label, target_hours in MILESTONES:
+        target_at = (
+            publication.published_at + timedelta(hours=target_hours)
+            if publication.published_at is not None
+            else None
+        )
+        snapshot = None
+        if target_at is not None:
+            snapshot = next(
+                (item for item in snapshots if item.captured_at >= target_at),
+                None,
+            )
+
+        result.append(
+            PerformanceMilestone(
+                label=label,
+                target_hours=target_hours,
+                target_at=target_at,
+                captured_at=snapshot.captured_at if snapshot else None,
+                views=snapshot.views if snapshot else None,
+                likes=snapshot.likes if snapshot else None,
+                comments=snapshot.comments if snapshot else None,
+                favorites=snapshot.favorites if snapshot else None,
+                shares=snapshot.shares if snapshot else None,
+                followers_gained=snapshot.followers_gained if snapshot else None,
+            )
+        )
+    return result
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
