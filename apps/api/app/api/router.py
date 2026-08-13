@@ -1,8 +1,9 @@
 from fastapi import APIRouter
 
-from app.api.routes import analytics, contents, dashboard, inspirations, publishing, reviews, settings, topics
+from app.api.routes import analytics, auth, contents, dashboard, inspirations, publishing, reviews, settings, topics
 
 api_router = APIRouter()
+api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(settings.router)
 api_router.include_router(inspirations.router)

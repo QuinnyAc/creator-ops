@@ -41,6 +41,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Shanghai", nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(Text)
 
 
 class Inspiration(UUIDPrimaryKeyMixin, TimestampMixin, Base):

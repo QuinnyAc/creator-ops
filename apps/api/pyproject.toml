@@ -11,7 +11,9 @@ dependencies = [
   "alembic>=1.14",
   "fastapi>=0.115",
   "psycopg[binary]>=3.2",
+  "pwdlib[argon2]>=0.2,<1",
   "pydantic-settings>=2.7",
+  "pyjwt>=2.10,<3",
   "sqlalchemy>=2.0",
   "uvicorn[standard]>=0.34",
 ]
