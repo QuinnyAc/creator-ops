@@ -33,6 +33,37 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContentPillarCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+
+
+class ContentPillarUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+
+
+class ContentPillarRead(ORMModel):
+    id: UUID
+    user_id: UUID
+    name: str
+    description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TagCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class TagRead(ORMModel):
+    id: UUID
+    user_id: UUID
+    name: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class InspirationCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     note: str | None = None
