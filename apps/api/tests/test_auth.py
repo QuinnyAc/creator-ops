@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
@@ -56,5 +56,5 @@ def test_register_login_and_authenticated_me() -> None:
     finally:
         if user_id is not None:
             with SessionLocal() as db:
-                db.execute(delete(User).where(User.id == user_id))
+                db.execute(delete(User).where(User.id == UUID(user_id)))
                 db.commit()

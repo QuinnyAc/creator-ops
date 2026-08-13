@@ -14,12 +14,15 @@ The repository now includes a working first-pass product architecture for:
 
 - low-friction inspiration inbox;
 - structured topic database and weighted topic scoring;
+- tags attached to topics and content assets;
 - content production Kanban and per-content workspace;
 - multi-platform account and publication management;
-- manual metric snapshots for longitudinal analytics;
+- monthly publishing calendar;
+- manual metric snapshots and 24h / 72h / 7d / 30d milestones;
+- Content Pillar performance analytics;
 - structured content reviews;
 - dashboard summaries;
-- content pillars and tags;
+- email/password registration and JWT authentication;
 - Docker-based local development;
 - PostgreSQL migrations and GitHub Actions CI.
 
@@ -58,6 +61,7 @@ A single `Content` can have multiple `Publication` records. That is important be
 | API | FastAPI + Python |
 | Database | PostgreSQL |
 | ORM / migrations | SQLAlchemy + Alembic |
+| Authentication | Argon2 password hashing + signed JWT |
 | Local runtime | Docker Compose |
 | CI | GitHub Actions |
 
@@ -68,7 +72,7 @@ creator-ops/
 ├── apps/
 │   ├── web/                 # Next.js creator workspace
 │   └── api/                 # FastAPI REST API
-├── docs/                    # Architecture, database, API and brand docs
+├── docs/                    # Architecture, database, API, deployment and brand docs
 ├── .github/                 # CI, issue templates and PR template
 ├── docker-compose.yml
 ├── Makefile
@@ -89,11 +93,14 @@ docker compose up --build
 Then open:
 
 - Creator workspace: `http://localhost:3000`
+- Login / registration: `http://localhost:3000/login`
 - API: `http://localhost:8000`
 - Swagger API docs: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 
 The API container applies `alembic upgrade head` before starting.
+
+Local development defaults to the seeded creator identity, so you can use the workflow immediately. You can also create a real account on `/login` and the web client will attach the returned Bearer token automatically.
 
 To reset all local PostgreSQL data:
 
@@ -139,17 +146,29 @@ npm run typecheck
 npm run build
 ```
 
-GitHub Actions also verifies Python compilation, migration upgrade/downgrade, backend tests, frontend type checking, and the production web build.
+GitHub Actions verifies Python compilation, migration upgrade/downgrade, backend tests including the complete creator workflow, frontend type checking, and the production web build.
 
-## Important MVP limitation
+## Production authentication
 
-Authentication is intentionally deferred while the single-user creator workflow is validated. A fixed local creator is seeded by the database migration. **Do not expose the current MVP directly as a public multi-tenant production service.** Authentication and authorization are required before that step.
+A public deployment must disable the local creator fallback and use a strong JWT secret:
+
+```env
+APP_ENV=production
+ALLOW_DEV_USER_FALLBACK=false
+JWT_SECRET_KEY=<strong-random-secret>
+NEXT_PUBLIC_REQUIRE_AUTH=true
+```
+
+The API refuses to boot in production with the unsafe development authentication defaults.
+
+See [`docs/deployment.md`](docs/deployment.md) for the production checklist.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Database design](docs/database.md)
 - [API overview](docs/api.md)
+- [Production deployment](docs/deployment.md)
 - [Brand direction](docs/branding.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -166,17 +185,18 @@ Authentication is intentionally deferred while the single-user creator workflow 
 - [x] Manual analytics snapshots
 - [x] Structured reviews
 - [x] Dashboard
-- [ ] Authentication
-- [ ] End-to-end integration tests
+- [x] Authentication foundation
+- [x] End-to-end creator loop integration test
 
 ### P1 — creator analytics
 
-- [ ] Topic / pillar performance comparisons
+- [x] Content Pillar performance comparisons
+- [x] 24h / 72h / 7d / 30d performance views
+- [x] Publishing calendar view
+- [x] Topic / content tag relationships
 - [ ] Title pattern analysis
-- [ ] 24h / 72h / 7d / 30d performance views
-- [ ] Publishing calendar view
 - [ ] CSV import / export
-- [ ] Better tag relationships in the UI
+- [ ] More API integration coverage
 
 ### P2 — creator intelligence
 
@@ -184,7 +204,7 @@ Authentication is intentionally deferred while the single-user creator workflow 
 - [ ] AI-assisted review
 - [ ] AI topic scoring suggestions
 - [ ] Creator Playbook / reusable insights
-- [ ] Team collaboration
+- [ ] Team collaboration and roles
 - [ ] Browser extension and automation hooks
 
 ## Open source
