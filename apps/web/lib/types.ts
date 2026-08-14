@@ -63,6 +63,23 @@ export type PlatformAnalyticsItem = {
   follower_conversion_rate: number;
 };
 
+export type TagAnalyticsItem = {
+  tag_id: string;
+  tag_name: string;
+  contents: number;
+  publications: number;
+  views: number;
+  likes: number;
+  comments: number;
+  favorites: number;
+  shares: number;
+  followers_gained: number;
+  avg_views: number;
+  engagement_rate: number;
+  favorite_rate: number;
+  follower_conversion_rate: number;
+};
+
 export type PerformanceMilestone = {
   label: string;
   target_hours: number;
