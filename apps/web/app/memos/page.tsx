@@ -75,7 +75,7 @@ export default function IdeaMemoPage() {
   }
 
   async function deleteMemo(memo: IdeaMemo) {
-    if (!window.confirm(`确定删除“${memo.title}”吗？删除后无法恢复。`)) return;
+    if (!window.confirm(`确定删除备忘录“${memo.title}”吗？删除后无法恢复。`)) return;
     setError("");
     try {
       await api<void>(`/idea-memos/${memo.id}`, { method: "DELETE" });
@@ -150,7 +150,7 @@ export default function IdeaMemoPage() {
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button className="button small secondary" type="button" onClick={() => editMemo(memo)}>修改</button>
-                    <button className="button small danger" type="button" onClick={() => void deleteMemo(memo)}>删除</button>
+                    <button className="button small danger" type="button" onClick={() => void deleteMemo(memo)}>删除备忘录</button>
                   </div>
                 </div>
                 <div
