@@ -62,8 +62,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="brand">
           <div className="brandMark">CO</div>
           <div>
-            <strong>Creator Ops</strong>
-            <span>Content operating system</span>
+            <strong>Quinny的工作台</strong>
+            <span>自媒体运营平台</span>
           </div>
         </div>
         <nav className="nav">
