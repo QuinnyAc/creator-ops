@@ -153,9 +153,9 @@ def create_publication(
         )
     )
     if content is None:
-        raise HTTPException(status_code=400, detail="Content does not belong to user.")
+        raise HTTPException(status_code=404, detail="Content not found.")
     if account is None:
-        raise HTTPException(status_code=400, detail="Platform account does not belong to user.")
+        raise HTTPException(status_code=404, detail="Platform account not found.")
     publication = Publication(**payload.model_dump())
     db.add(publication)
     db.commit()
