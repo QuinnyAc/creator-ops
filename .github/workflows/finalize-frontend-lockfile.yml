@@ -46,7 +46,7 @@ jobs:
                   ("run: npm install", "run: npm ci"),
               ],
               Path(".github/workflows/release.yml"): [
-                  ("          npm install\n", "          npm ci\n"),
+                  ("run: npm install", "run: npm ci"),
               ],
               Path("README.md"): [
                   ("cd apps/web\nnpm install\nnpm run dev", "cd apps/web\nnpm ci\nnpm run dev"),
