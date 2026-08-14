@@ -3,18 +3,125 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { PlusIcon } from "@/components/icons";
-import { Badge, EmptyState, ErrorBanner, PageHeader, Section, formatDate } from "@/components/ui";
+import { Badge, EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
 import { api, patchJson, postJson } from "@/lib/api";
 import type { ContentItem, Platform, PlatformAccount, Publication } from "@/lib/types";
 
 const PUBLICATION_STATUSES = ["draft", "scheduled", "published", "failed", "archived"];
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
-function dateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+type WorkspaceProfile = {
+  timezone: string;
+};
+
+type ZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function zonedParts(value: string | Date, timeZone: string): ZonedParts {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+  };
+}
+
+function dateKeyInTimeZone(value: string | Date, timeZone: string) {
+  const parts = zonedParts(value, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function calendarDateKey(year: number, monthIndex: number, day: number) {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthForNow(timeZone: string) {
+  const parts = zonedParts(new Date(), timeZone);
+  return new Date(Date.UTC(parts.year, parts.month - 1, 1));
+}
+
+function monthForLocalInput(value: string) {
+  const match = /^(\d{4})-(\d{2})-\d{2}T/.exec(value);
+  if (!match) return null;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+}
+
+function zonedLocalToIso(value: string, timeZone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) {
+    throw new Error("计划发布时间格式无效");
+  }
+
+  const desired = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+  };
+  const desiredWall = Date.UTC(
+    desired.year,
+    desired.month - 1,
+    desired.day,
+    desired.hour,
+    desired.minute,
+    0,
+  );
+
+  let instant = desiredWall;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actual = zonedParts(new Date(instant), timeZone);
+    const actualWall = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      0,
+    );
+    const correction = desiredWall - actualWall;
+    if (correction === 0) break;
+    instant += correction;
+  }
+  return new Date(instant).toISOString();
+}
+
+function formatInTimeZone(value: string | null, timeZone: string) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value));
 }
 
 function publicationDate(item: Publication) {
@@ -26,10 +133,8 @@ export default function PublishingPage() {
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
+  const [timezone, setTimezone] = useState("Asia/Shanghai");
+  const [month, setMonth] = useState(() => monthForNow("Asia/Shanghai"));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -46,12 +151,14 @@ export default function PublishingPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [nextPlatforms, nextAccounts, nextContents, nextPublications] = await Promise.all([
+      const [profile, nextPlatforms, nextAccounts, nextContents, nextPublications] = await Promise.all([
+        api<WorkspaceProfile>("/auth/me"),
         api<Platform[]>("/platforms"),
         api<PlatformAccount[]>("/platform-accounts"),
         api<ContentItem[]>("/contents"),
         api<Publication[]>("/publications"),
       ]);
+      setTimezone(profile.timezone);
       setPlatforms(nextPlatforms);
       setAccounts(nextAccounts);
       setContents(nextContents);
@@ -59,6 +166,10 @@ export default function PublishingPage() {
       setAccountPlatformId((current) => current || nextPlatforms[0]?.id || "");
       setAccountId((current) => current || nextAccounts[0]?.id || "");
       setContentId((current) => current || nextContents[0]?.id || "");
+      setMonth((current) => {
+        const initial = monthForNow("Asia/Shanghai");
+        return current.getTime() === initial.getTime() ? monthForNow(profile.timezone) : current;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "发布数据加载失败");
     }
@@ -77,24 +188,24 @@ export default function PublishingPage() {
     for (const item of publications) {
       const value = publicationDate(item);
       if (!value) continue;
-      const key = dateKey(new Date(value));
+      const key = dateKeyInTimeZone(value, timezone);
       const list = map.get(key) ?? [];
       list.push(item);
       map.set(key, list);
     }
     return map;
-  }, [publications]);
+  }, [publications, timezone]);
 
   const calendarCells = useMemo(() => {
-    const first = new Date(month.getFullYear(), month.getMonth(), 1);
-    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    const mondayOffset = (first.getDay() + 6) % 7;
+    const year = month.getUTCFullYear();
+    const monthIndex = month.getUTCMonth();
+    const first = new Date(Date.UTC(year, monthIndex, 1));
+    const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+    const mondayOffset = (first.getUTCDay() + 6) % 7;
     const totalCells = Math.ceil((mondayOffset + daysInMonth) / 7) * 7;
     return Array.from({ length: totalCells }, (_, index) => {
       const dayNumber = index - mondayOffset + 1;
-      return dayNumber >= 1 && dayNumber <= daysInMonth
-        ? new Date(month.getFullYear(), month.getMonth(), dayNumber)
-        : null;
+      return dayNumber >= 1 && dayNumber <= daysInMonth ? dayNumber : null;
     });
   }, [month]);
 
@@ -131,12 +242,12 @@ export default function PublishingPage() {
         platform_account_id: accountId,
         title: publicationTitle.trim() || content?.title || null,
         status: publicationStatus,
-        scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        scheduled_at: scheduledAt ? zonedLocalToIso(scheduledAt, timezone) : null,
         platform_tags: [],
       });
       if (scheduledAt) {
-        const nextDate = new Date(scheduledAt);
-        setMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+        const nextMonth = monthForLocalInput(scheduledAt);
+        if (nextMonth) setMonth(nextMonth);
       }
       setPublicationTitle("");
       setScheduledAt("");
@@ -163,15 +274,19 @@ export default function PublishingPage() {
   }
 
   function shiftMonth(delta: number) {
-    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+    setMonth((current) => new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + delta, 1)));
   }
+
+  const currentYear = month.getUTCFullYear();
+  const currentMonthIndex = month.getUTCMonth();
+  const todayKey = dateKeyInTimeZone(new Date(), timezone);
 
   return (
     <>
       <PageHeader
         eyebrow="PUBLISH"
         title="发布管理"
-        description="管理什么时候发、发到哪里、哪个账号、是否已发，并用月历检查内容节奏。"
+        description={`管理什么时候发、发到哪里、哪个账号，并按 ${timezone} 工作台时区检查发布节奏。`}
       />
       {error ? <ErrorBanner message={error} /> : null}
 
@@ -225,7 +340,7 @@ export default function PublishingPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="publish-time">计划发布时间</label>
+              <label htmlFor="publish-time">计划发布时间 · {timezone}</label>
               <input id="publish-time" className="input" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
             </div>
             <div className="formActions"><button className="button" disabled={saving || !contentId || !accountId} type="submit">加入发布计划</button></div>
@@ -235,11 +350,11 @@ export default function PublishingPage() {
 
       <Section
         title="发布日历"
-        description="按月查看内容密度、平台节奏和空档日期。"
+        description={`按 ${timezone} 归属日期查看内容密度、平台节奏和空档日期。`}
         action={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button className="button small secondary" type="button" onClick={() => shiftMonth(-1)}>←</button>
-            <strong style={{ minWidth: 104, textAlign: "center", fontSize: 12 }}>{month.getFullYear()} / {month.getMonth() + 1}</strong>
+            <strong style={{ minWidth: 104, textAlign: "center", fontSize: 12 }}>{currentYear} / {currentMonthIndex + 1}</strong>
             <button className="button small secondary" type="button" onClick={() => shiftMonth(1)}>→</button>
           </div>
         }
@@ -252,13 +367,13 @@ export default function PublishingPage() {
               ))}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6 }}>
-              {calendarCells.map((date, index) => {
-                if (!date) {
+              {calendarCells.map((dayNumber, index) => {
+                if (!dayNumber) {
                   return <div key={`blank-${index}`} style={{ minHeight: 126, background: "#fafafa", borderRadius: 10 }} />;
                 }
-                const key = dateKey(date);
+                const key = calendarDateKey(currentYear, currentMonthIndex, dayNumber);
                 const items = publicationsByDay.get(key) ?? [];
-                const isToday = key === dateKey(new Date());
+                const isToday = key === todayKey;
                 return (
                   <div
                     key={key}
@@ -272,7 +387,7 @@ export default function PublishingPage() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                      <strong style={{ fontSize: 11 }}>{date.getDate()}</strong>
+                      <strong style={{ fontSize: 11 }}>{dayNumber}</strong>
                       {items.length > 0 ? <span className="kanbanCount">{items.length}</span> : null}
                     </div>
                     <div style={{ display: "grid", gap: 5 }}>
@@ -298,7 +413,7 @@ export default function PublishingPage() {
 
       <div style={{ height: 16 }} />
 
-      <Section title={`发布记录 · ${publications.length}`} description="日历负责节奏，列表负责状态和精确时间。">
+      <Section title={`发布记录 · ${publications.length}`} description={`精确时间按 ${timezone} 展示；数据库仍保存 UTC 时间戳。`}>
         {publications.length === 0 ? (
           <EmptyState>{accounts.length === 0 ? "先添加一个平台账号，再为内容创建发布实例。" : "还没有发布计划。"}</EmptyState>
         ) : (
@@ -309,7 +424,7 @@ export default function PublishingPage() {
               const content = contentMap.get(item.content_id);
               return (
                 <div className="calendarItem" key={item.id}>
-                  <div className="calendarDate">{formatDate(item.scheduled_at || item.published_at)}</div>
+                  <div className="calendarDate">{formatInTimeZone(item.scheduled_at || item.published_at, timezone)}</div>
                   <div>
                     <div className="dataRowTitle">{item.title || content?.title || "未命名发布"}</div>
                     <div className="dataRowMeta">{platform?.name ?? "平台"} · {account?.name ?? "账号"} · 核心内容：{content?.title ?? "—"}</div>
