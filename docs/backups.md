@@ -39,7 +39,7 @@ Store production backup files outside the application checkout and preferably co
 
 ## Restore
 
-Restore is deliberately guarded because it replaces current PostgreSQL data.
+Restore is deliberately guarded because it replaces current PostgreSQL data. On a production deployment, schedule the operation inside a maintenance window and verify the backup file before beginning.
 
 Development convenience target:
 
