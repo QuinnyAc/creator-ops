@@ -4,7 +4,15 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmptyState, ErrorBanner, PageHeader, Section, StatCard, formatDate, formatNumber } from "@/components/ui";
 import { api, postJson } from "@/lib/api";
-import type { AnalyticsSummary, ContentItem, MetricSnapshot, PerformanceMilestone, PillarAnalyticsItem, Publication } from "@/lib/types";
+import type {
+  AnalyticsSummary,
+  ContentItem,
+  MetricSnapshot,
+  PerformanceMilestone,
+  PillarAnalyticsItem,
+  PlatformAnalyticsItem,
+  Publication,
+} from "@/lib/types";
 
 function localNow() {
   const date = new Date();
@@ -25,6 +33,7 @@ const EMPTY_SUMMARY: AnalyticsSummary = {
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [pillarAnalytics, setPillarAnalytics] = useState<PillarAnalyticsItem[]>([]);
+  const [platformAnalytics, setPlatformAnalytics] = useState<PlatformAnalyticsItem[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -42,14 +51,16 @@ export default function AnalyticsPage() {
 
   const loadOverview = useCallback(async () => {
     try {
-      const [nextSummary, nextPillars, nextPublications, nextContents] = await Promise.all([
+      const [nextSummary, nextPillars, nextPlatforms, nextPublications, nextContents] = await Promise.all([
         api<AnalyticsSummary>("/analytics/summary"),
         api<PillarAnalyticsItem[]>("/analytics/pillars"),
+        api<PlatformAnalyticsItem[]>("/analytics/platforms"),
         api<Publication[]>("/publications"),
         api<ContentItem[]>("/contents"),
       ]);
       setSummary(nextSummary);
       setPillarAnalytics(nextPillars);
+      setPlatformAnalytics(nextPlatforms);
       setPublications(nextPublications);
       setContents(nextContents);
       setSelectedId((current) => current || nextPublications[0]?.id || "");
@@ -141,6 +152,33 @@ export default function AnalyticsPage() {
                 {pillarAnalytics.map((item) => (
                   <tr key={item.pillar_id}>
                     <td><div className="tableTitle">{item.pillar_name}</div></td>
+                    <td>{item.publications}</td>
+                    <td>{formatNumber(Math.round(item.avg_views))}</td>
+                    <td className="score">{item.engagement_rate}%</td>
+                    <td className="score">{item.favorite_rate}%</td>
+                    <td className="score high">{item.follower_conversion_rate}%</td>
+                    <td>{formatNumber(item.views)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
+
+      <Section title="哪个平台更适合我？" description="按平台聚合最新快照，比较平均浏览、互动、收藏和转粉效率。">
+        {platformAnalytics.length === 0 ? (
+          <EmptyState>还没有平台表现数据。为不同平台创建 Publication 并记录数据后，这里会自动比较。</EmptyState>
+        ) : (
+          <div className="tableWrap">
+            <table className="table">
+              <thead><tr><th>平台</th><th>发布</th><th>平均浏览</th><th>互动率</th><th>收藏率</th><th>转粉率</th><th>总浏览</th></tr></thead>
+              <tbody>
+                {platformAnalytics.map((item) => (
+                  <tr key={item.platform_id}>
+                    <td><div className="tableTitle">{item.platform_name}</div><div className="dataRowMeta">{item.platform_slug}</div></td>
                     <td>{item.publications}</td>
                     <td>{formatNumber(Math.round(item.avg_views))}</td>
                     <td className="score">{item.engagement_rate}%</td>
