@@ -8,6 +8,8 @@ Creator Ops helps individual creators and small content teams manage the full co
 
 It is intentionally not another generic Notion-style database. Creator Ops understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, the review produced from those results, and the reusable creator knowledge that should influence the next decision.
 
+**Latest release:** [Creator Ops v0.1.0](https://github.com/QuinnyAc/creator-ops/releases/tag/v0.1.0)
+
 **Explore:** [Product Tour](docs/product-tour.md) · [60-second demo](#60-second-demo) · [Codespaces](docs/codespaces.md) · [Deployment](docs/deployment.md) · [API](docs/api.md)
 
 ## Why Creator Ops
