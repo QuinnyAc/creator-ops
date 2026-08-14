@@ -24,15 +24,43 @@ from app.models_insights import Insight
 from app.services.scoring import calculate_topic_scores
 
 DEMO_MARKER = "Demo · AI Tools"
+PLATFORM_SLUGS = {"xiaohongshu", "bilibili", "wechat_official", "youtube"}
 
 
-def _score(topic: Topic, **values: int) -> TopicScore:
+def _topic_score(topic: Topic, **values: int) -> TopicScore:
     opportunity, priority = calculate_topic_scores(**values)
     return TopicScore(
         topic_id=topic.id,
         opportunity_score=opportunity,
         priority_score=priority,
         **values,
+    )
+
+
+def _metric(
+    publication: Publication,
+    *,
+    day: int,
+    views: int,
+    likes: int,
+    comments: int,
+    favorites: int,
+    shares: int,
+    followers: int,
+    extra: dict[str, int | float | str] | None = None,
+) -> MetricSnapshot:
+    if publication.published_at is None:
+        raise ValueError("Demo metric publication must have published_at.")
+    return MetricSnapshot(
+        publication_id=publication.id,
+        captured_at=publication.published_at + timedelta(days=day),
+        views=views,
+        likes=likes,
+        comments=comments,
+        favorites=favorites,
+        shares=shares,
+        followers_gained=followers,
+        extra_metrics=extra or {},
     )
 
 
@@ -45,19 +73,24 @@ def seed_demo() -> None:
     with SessionLocal() as db:
         user = db.get(User, settings.default_user_id)
         if user is None:
-            raise SystemExit(
-                "Seeded local creator user is missing. Run `alembic upgrade head` first."
-            )
+            raise SystemExit("Run `alembic upgrade head` before seeding demo data.")
 
-        already_seeded = db.scalar(
+        exists = db.scalar(
             select(ContentPillar.id).where(
                 ContentPillar.user_id == user.id,
                 ContentPillar.name == DEMO_MARKER,
             )
         )
-        if already_seeded is not None:
+        if exists is not None:
             print("Creator Ops demo data already exists; nothing changed.")
             return
+
+        platforms = {
+            item.slug: item
+            for item in db.scalars(select(Platform).where(Platform.slug.in_(PLATFORM_SLUGS)))
+        }
+        if set(platforms) != PLATFORM_SLUGS:
+            raise SystemExit("Platform catalog is incomplete. Run all migrations first.")
 
         pillars = {
             "ai": ContentPillar(
@@ -76,78 +109,65 @@ def seed_demo() -> None:
                 description="Product thinking for creators and independent builders.",
             ),
         }
-        db.add_all(pillars.values())
-        db.flush()
-
         tags = {
-            name: Tag(user_id=user.id, name=f"Demo · {name}")
-            for name in ("教程", "清单", "新手", "案例", "增长")
+            key: Tag(user_id=user.id, name=f"Demo · {key}")
+            for key in ("教程", "清单", "案例", "增长")
         }
-        db.add_all(tags.values())
+        db.add_all([*pillars.values(), *tags.values()])
         db.flush()
 
-        inspirations = [
-            Inspiration(
-                user_id=user.id,
-                title="Demo · 为什么知识型内容的收藏率值得重点看？",
-                note="评论区反复有人问：播放量之外，到底哪个指标更值得长期观察？",
-                source="评论区",
-                status="inbox",
-            ),
-            Inspiration(
-                user_id=user.id,
-                title="Demo · 用 AI 把 2 小时研究压缩到 20 分钟",
-                note="把真实研究工作流拆成可以复用的步骤。",
-                source="工作流复盘",
-                status="inbox",
-            ),
-            Inspiration(
-                user_id=user.id,
-                title="Demo · 创作者为什么需要自己的 Operating System",
-                note="把 Notion 模板升级成完整运营闭环的产品观点。",
-                source="产品思考",
-                status="inbox",
-            ),
-        ]
-        db.add_all(inspirations)
+        inspiration_metrics = Inspiration(
+            user_id=user.id,
+            title="Demo · 为什么知识型内容的收藏率值得重点看？",
+            note="后台有很多数字，但哪些真正能指导下一条内容？",
+            source="评论区",
+            status="inbox",
+        )
+        inspiration_os = Inspiration(
+            user_id=user.id,
+            title="Demo · 创作者为什么需要自己的 Operating System",
+            note="通用表格能记录内容，但很难形成数据闭环。",
+            source="产品思考",
+            status="inbox",
+        )
+        db.add_all([inspiration_metrics, inspiration_os])
         db.flush()
 
         topics = {
-            "ai_workflow": Topic(
+            "ai": Topic(
                 user_id=user.id,
-                inspiration_id=inspirations[1].id,
                 pillar_id=pillars["ai"].id,
                 title="Demo · AI 研究工作流：从 2 小时到 20 分钟",
-                core_idea="展示一套真实可复制的 AI 辅助研究流程，而不是罗列工具。",
+                core_idea="展示真实可复制的 AI 辅助研究流程，而不是罗列工具。",
                 target_audience="知识型创作者、独立开发者",
-                user_problem="研究资料多、整理慢、难以形成内容结构",
-                angle="完整工作流 + 前后时间对比",
+                user_problem="资料多、整理慢、研究过程无法复用",
+                angle="完整工作流 + 前后耗时对比",
                 goal="growth",
                 status="approved",
                 planned_platforms=["bilibili", "xiaohongshu"],
             ),
             "metrics": Topic(
                 user_id=user.id,
-                inspiration_id=inspirations[0].id,
+                inspiration_id=inspiration_metrics.id,
                 pillar_id=pillars["growth"].id,
                 title="Demo · 别只看点赞：知识型内容更值得追踪的 3 个指标",
-                core_idea="用收藏率、互动率和转粉率解释内容的长期价值。",
+                core_idea="用收藏率、互动率和转粉率解释内容长期价值。",
                 target_audience="正在认真运营账号的知识型创作者",
-                user_problem="看了后台数据，但不知道什么指标能指导下一条内容",
+                user_problem="看了后台数据，却不知道如何指导下一轮创作",
                 angle="从决策价值而不是虚荣指标出发",
                 goal="retention",
                 status="approved",
                 planned_platforms=["xiaohongshu", "bilibili"],
             ),
-            "creator_os": Topic(
+            "os": Topic(
                 user_id=user.id,
-                inspiration_id=inspirations[2].id,
+                inspiration_id=inspiration_os.id,
                 pillar_id=pillars["product"].id,
                 title="Demo · 从内容表格到 Creator OS：创作者真正需要什么系统？",
                 core_idea="解释通用数据库与垂直 Creator Operations System 的差别。",
                 target_audience="个人 IP、独立创作者、内容团队负责人",
-                user_problem="Notion / 表格能记录内容，但无法形成数据驱动闭环",
-                angle="以 Topic → Content → Publication → Metrics → Review 为主线",
+                user_problem="信息能记录，但选题、发布、数据和复盘没有闭环",
+                angle="Topic → Content → Publication → Metrics → Review",
                 goal="brand",
                 status="evaluating",
                 planned_platforms=["bilibili", "youtube"],
@@ -156,7 +176,7 @@ def seed_demo() -> None:
                 user_id=user.id,
                 pillar_id=pillars["ai"].id,
                 title="Demo · 7 个 AI 标题公式，哪些真的能提高收藏？",
-                core_idea="把标题模式与真实收藏表现连接起来。",
+                core_idea="把标题模式与历史收藏表现连接起来。",
                 target_audience="知识型自媒体创作者",
                 user_problem="标题靠感觉，没有自己的历史证据",
                 angle="标题模式 + 数据对比",
@@ -168,68 +188,52 @@ def seed_demo() -> None:
         db.add_all(topics.values())
         db.flush()
 
-        db.add_all(
-            [
-                _score(
-                    topics["ai_workflow"],
-                    pain_point=5,
-                    search_demand=5,
-                    trend_heat=5,
-                    differentiation=4,
-                    commercial_value=5,
-                    production_effort=2,
-                ),
-                _score(
-                    topics["metrics"],
-                    pain_point=5,
-                    search_demand=4,
-                    trend_heat=4,
-                    differentiation=5,
-                    commercial_value=4,
-                    production_effort=2,
-                ),
-                _score(
-                    topics["creator_os"],
-                    pain_point=4,
-                    search_demand=3,
-                    trend_heat=3,
-                    differentiation=5,
-                    commercial_value=5,
-                    production_effort=3,
-                ),
-                _score(
-                    topics["title"],
-                    pain_point=4,
-                    search_demand=5,
-                    trend_heat=4,
-                    differentiation=4,
-                    commercial_value=4,
-                    production_effort=2,
-                ),
-            ]
-        )
-
+        score_values = {
+            "ai": dict(
+                pain_point=5,
+                search_demand=5,
+                trend_heat=5,
+                differentiation=4,
+                commercial_value=5,
+                production_effort=2,
+            ),
+            "metrics": dict(
+                pain_point=5,
+                search_demand=4,
+                trend_heat=4,
+                differentiation=5,
+                commercial_value=4,
+                production_effort=2,
+            ),
+            "os": dict(
+                pain_point=4,
+                search_demand=3,
+                trend_heat=3,
+                differentiation=5,
+                commercial_value=5,
+                production_effort=3,
+            ),
+            "title": dict(
+                pain_point=4,
+                search_demand=5,
+                trend_heat=4,
+                differentiation=4,
+                commercial_value=4,
+                production_effort=2,
+            ),
+        }
+        db.add_all([_topic_score(topics[key], **values) for key, values in score_values.items()])
         db.execute(
             insert(topic_tags),
             [
-                {"topic_id": topics["ai_workflow"].id, "tag_id": tags["教程"].id},
-                {"topic_id": topics["ai_workflow"].id, "tag_id": tags["案例"].id},
+                {"topic_id": topics["ai"].id, "tag_id": tags["教程"].id},
+                {"topic_id": topics["ai"].id, "tag_id": tags["案例"].id},
                 {"topic_id": topics["metrics"].id, "tag_id": tags["增长"].id},
                 {"topic_id": topics["metrics"].id, "tag_id": tags["清单"].id},
-                {"topic_id": topics["creator_os"].id, "tag_id": tags["案例"].id},
+                {"topic_id": topics["os"].id, "tag_id": tags["案例"].id},
                 {"topic_id": topics["title"].id, "tag_id": tags["清单"].id},
             ],
         )
-
-        platform_rows = db.execute(
-            select(Platform).where(
-                Platform.slug.in_(["xiaohongshu", "bilibili", "wechat", "youtube"])
-            )
-        ).scalars()
-        platforms = {platform.slug: platform for platform in platform_rows}
-        required_platforms = {"xiaohongshu", "bilibili", "wechat", "youtube"}
-        if set(platforms) != required_platforms:
-            raise SystemExit("Platform catalog is incomplete. Run all Alembic migrations first.")
 
         accounts = {
             slug: PlatformAccount(
@@ -244,18 +248,18 @@ def seed_demo() -> None:
         db.flush()
 
         contents = {
-            "ai_workflow": Content(
+            "ai": Content(
                 user_id=user.id,
-                topic_id=topics["ai_workflow"].id,
+                topic_id=topics["ai"].id,
                 pillar_id=pillars["ai"].id,
                 title="Demo · 我用 AI 把内容研究从 2 小时压缩到 20 分钟",
                 content_type="video",
                 status="published",
-                research_notes="记录研究任务拆分、资料抓取、事实核对和最终大纲生成的真实耗时。",
+                research_notes="记录任务拆分、资料检索、事实核对和大纲整理的真实耗时。",
                 outline="痛点 → 原流程 → 新流程 → 前后对比 → 适用边界",
-                script="不要从工具开始。先把研究任务拆成问题清单，再让 AI 帮你寻找候选答案，最后人工核对关键事实。",
-                copywriting="真正省时间的不是某个 AI 工具，而是一套可以重复使用的研究流程。",
-                cta="收藏这套流程，下次做深度内容时直接照着跑一遍。",
+                script="先把研究任务拆成问题清单，再让 AI 找候选答案，关键事实仍由人核对。",
+                copywriting="真正省时间的不是某个 AI 工具，而是一套可重复使用的研究流程。",
+                cta="收藏这套流程，下次做深度内容时直接跑一遍。",
                 planned_publish_at=now - timedelta(days=12),
             ),
             "metrics": Content(
@@ -267,21 +271,19 @@ def seed_demo() -> None:
                 status="review",
                 research_notes="比较收藏、互动、转粉对下一轮内容决策的解释力。",
                 outline="虚荣指标 → 收藏率 → 互动率 → 转粉率 → 如何复盘",
-                script="点赞说明这一秒觉得不错，收藏往往意味着用户认为以后还会回来。",
-                copywriting="如果你的内容目标是长期增长，只盯点赞很容易做错下一条。",
-                cta="把你最近 10 条内容的收藏率和转粉率拉出来看一次。",
-                planned_publish_at=now - timedelta(days=40),
+                script="点赞说明这一秒觉得不错，收藏往往代表用户认为以后还会回来。",
+                copywriting="如果目标是长期增长，只盯点赞很容易做错下一条。",
+                cta="把最近 10 条内容的收藏率和转粉率拉出来看一次。",
             ),
-            "creator_os": Content(
+            "os": Content(
                 user_id=user.id,
-                topic_id=topics["creator_os"].id,
+                topic_id=topics["os"].id,
                 pillar_id=pillars["product"].id,
                 title="Demo · Creator OS 的产品结构",
                 content_type="article",
                 status="script",
-                research_notes="梳理通用工具与垂直内容运营系统的差异。",
-                outline="Notion 的优势 → 垂直系统的必要性 → 核心实体 → 数据飞轮",
-                script="一张表能记录内容，但它不知道 Topic、Content 和 Publication 为什么是不同对象。",
+                outline="Notion 优势 → 垂直系统必要性 → 核心实体 → 数据飞轮",
+                script="一张表能记录内容，但它不知道 Topic、Content 和 Publication 为什么不同。",
             ),
             "title": Content(
                 user_id=user.id,
@@ -290,43 +292,39 @@ def seed_demo() -> None:
                 title="Demo · 7 个 AI 标题公式实测",
                 content_type="video",
                 status="ready",
-                research_notes="用历史标题模式分析决定测试样本。",
                 outline="7 种公式 → 历史数据 → 选择 3 个继续测试",
-                script="标题不是玄学。先从自己的历史内容里找出哪些结构真正有效。",
+                script="标题不是玄学，先从自己的历史内容里找出真正有效的结构。",
                 planned_publish_at=now + timedelta(days=3),
             ),
         }
         db.add_all(contents.values())
         db.flush()
-
         db.execute(
             insert(content_tags),
             [
-                {"content_id": contents["ai_workflow"].id, "tag_id": tags["教程"].id},
-                {"content_id": contents["ai_workflow"].id, "tag_id": tags["案例"].id},
+                {"content_id": contents["ai"].id, "tag_id": tags["教程"].id},
+                {"content_id": contents["ai"].id, "tag_id": tags["案例"].id},
                 {"content_id": contents["metrics"].id, "tag_id": tags["增长"].id},
                 {"content_id": contents["metrics"].id, "tag_id": tags["清单"].id},
-                {"content_id": contents["creator_os"].id, "tag_id": tags["案例"].id},
+                {"content_id": contents["os"].id, "tag_id": tags["案例"].id},
                 {"content_id": contents["title"].id, "tag_id": tags["清单"].id},
             ],
         )
 
         publications = {
-            "ai_bilibili": Publication(
-                content_id=contents["ai_workflow"].id,
+            "ai_bili": Publication(
+                content_id=contents["ai"].id,
                 platform_account_id=accounts["bilibili"].id,
                 title="2 小时 → 20 分钟：我的 AI 内容研究工作流",
-                copywriting="完整展示我现在如何做深度内容研究。",
                 platform_tags=["AI", "效率", "自媒体"],
                 status="published",
                 published_at=now - timedelta(days=11),
                 url="https://example.com/demo/bilibili/ai-workflow",
             ),
             "ai_xhs": Publication(
-                content_id=contents["ai_workflow"].id,
+                content_id=contents["ai"].id,
                 platform_account_id=accounts["xiaohongshu"].id,
                 title="我把内容研究从 2 小时压缩到 20 分钟的 5 步流程",
-                copywriting="不是工具清单，是我每天真的在用的研究 SOP。",
                 platform_tags=["AI工具", "内容创作", "效率"],
                 status="published",
                 published_at=now - timedelta(days=10),
@@ -362,63 +360,47 @@ def seed_demo() -> None:
         db.add_all(publications.values())
         db.flush()
 
-        metric_specs = [
-            ("ai_bilibili", 1, 11000, 720, 88, 620, 96, 180, {"coins": 150}),
-            ("ai_bilibili", 7, 24500, 1450, 210, 1380, 240, 390, {"coins": 310}),
-            ("ai_xhs", 1, 8200, 690, 76, 980, 110, 145, {}),
-            ("ai_xhs", 7, 16800, 1260, 142, 2120, 250, 280, {}),
-            ("metrics_previous", 1, 9800, 720, 95, 1350, 120, 160, {}),
-            ("metrics_previous", 7, 14200, 990, 150, 2160, 210, 230, {}),
-            ("metrics_recent", 1, 4200, 260, 46, 310, 42, 55, {"coins": 30}),
-            ("metrics_recent", 7, 6900, 420, 75, 520, 76, 82, {"coins": 54}),
-        ]
-        for key, day, views, likes, comments, favorites, shares, followers, extra in metric_specs:
-            publication = publications[key]
-            db.add(
-                MetricSnapshot(
-                    publication_id=publication.id,
-                    captured_at=publication.published_at + timedelta(days=day),
-                    views=views,
-                    likes=likes,
-                    comments=comments,
-                    favorites=favorites,
-                    shares=shares,
-                    followers_gained=followers,
-                    extra_metrics=extra,
-                )
-            )
-
-        review = Review(
-            content_id=contents["ai_workflow"].id,
-            goal="验证工作流教程是否同时带来收藏和涨粉。",
-            expected_outcome="收藏率高于普通观点内容，并在两个平台都能获得持续长尾。",
-            what_worked="具体时间对比让价值非常直观；步骤足够具体，收藏动机强。",
-            what_didnt_work="B站标题偏功能描述，后续可以测试更强的结果型包装。",
-            learnings="对知识型教程，明确结果 + 可复制步骤比单纯工具清单更容易产生高收藏；同一核心内容跨平台时应保留价值结构但改写标题包装。",
-            next_action="继续做 AI 创作工作流系列，并为同一内容预先设计两种平台标题模式。",
+        db.add_all(
+            [
+                _metric(publications["ai_bili"], day=1, views=11000, likes=720, comments=88, favorites=620, shares=96, followers=180, extra={"coins": 150}),
+                _metric(publications["ai_bili"], day=7, views=24500, likes=1450, comments=210, favorites=1380, shares=240, followers=390, extra={"coins": 310}),
+                _metric(publications["ai_xhs"], day=1, views=8200, likes=690, comments=76, favorites=980, shares=110, followers=145),
+                _metric(publications["ai_xhs"], day=7, views=16800, likes=1260, comments=142, favorites=2120, shares=250, followers=280),
+                _metric(publications["metrics_previous"], day=1, views=9800, likes=720, comments=95, favorites=1350, shares=120, followers=160),
+                _metric(publications["metrics_previous"], day=7, views=14200, likes=990, comments=150, favorites=2160, shares=210, followers=230),
+                _metric(publications["metrics_recent"], day=1, views=4200, likes=260, comments=46, favorites=310, shares=42, followers=55, extra={"coins": 30}),
+                _metric(publications["metrics_recent"], day=7, views=6900, likes=420, comments=75, favorites=520, shares=76, followers=82, extra={"coins": 54}),
+            ]
         )
-        db.add(review)
+
+        ai_review = Review(
+            content_id=contents["ai"].id,
+            goal="验证工作流教程是否同时带来收藏和涨粉。",
+            expected_outcome="两个平台都获得明显收藏与长尾。",
+            what_worked="明确结果 + 可复制步骤让价值很直观。",
+            what_didnt_work="B站标题偏功能描述，后续可以测试更强结果型包装。",
+            learnings="知识型教程里，明确结果 + 可复制步骤比单纯工具清单更容易产生高收藏；跨平台应保留价值结构，但改写标题包装。",
+            next_action="继续做 AI 创作工作流系列，每次只测试一个包装变量。",
+        )
+        metrics_review = Review(
+            content_id=contents["metrics"].id,
+            goal="判断创作者指标主题是否仍值得继续做。",
+            expected_outcome="高收藏，但近期曝光可能低于上一个周期。",
+            what_worked="用户问题明确，收藏信号仍然存在。",
+            what_didnt_work="近期平均浏览下降，包装或用户兴趣可能变化。",
+            learnings="历史高表现不代表当前兴趣，应该比较最近 30 天与前 30 天。",
+            next_action="保留数据复盘主题，换成更具体的案例标题再验证一次。",
+        )
+        db.add_all([ai_review, metrics_review])
         db.flush()
         db.add(
             Insight(
                 user_id=user.id,
-                source_review_id=review.id,
+                source_review_id=ai_review.id,
                 title="Demo · 教程内容：明确结果 + 可复制步骤",
-                body=review.learnings or "",
+                body=ai_review.learnings or "",
                 category="validated-learning",
                 status="active",
-            )
-        )
-
-        db.add(
-            Review(
-                content_id=contents["metrics"].id,
-                goal="判断创作者指标主题是否仍值得继续做。",
-                expected_outcome="高收藏，但近期曝光可能低于上一个周期。",
-                what_worked="用户问题明确，收藏信号仍然存在。",
-                what_didnt_work="近期版本平均浏览下降，说明包装或用户兴趣可能发生变化。",
-                learnings="同一 Content Pillar 的历史高表现不能永久代表当前兴趣，应该比较最近 30 天与前 30 天。",
-                next_action="保留数据复盘主题，但换成更具体的案例标题再验证一次。",
             )
         )
 
