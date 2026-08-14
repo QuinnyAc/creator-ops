@@ -16,12 +16,12 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ),
     (
         "number",
-        re.compile(r"\d+|[一二三四五六七八九十百]+(?:个|条|种|步|招|点)"),
+        re.compile(r"\d+|[一二三四五六七八九十百]+\s*(?:个|条|种|步|招|点)"),
     ),
     (
         "list",
         re.compile(
-            r"清单|合集|盘点|大全|(?:\d+|[一二三四五六七八九十]+)(?:个|条|种|步|招|点)|tips|ways|things|checklist",
+            r"清单|合集|盘点|大全|(?:\d+|[一二三四五六七八九十]+)\s*(?:个|条|种|步|招|点)|tips|ways|things|checklist",
             re.IGNORECASE,
         ),
     ),
