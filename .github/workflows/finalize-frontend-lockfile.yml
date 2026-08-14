@@ -5,7 +5,8 @@ on:
     branches:
       - chore/frontend-lockfile-v2
 
-# One-time workflow: it removes itself after committing the generated lockfile.
+# One-time helper. It only commits the generated lockfile; workflow/build edits
+# are applied separately so the GitHub Actions token never needs workflow-write permission.
 permissions:
   contents: write
 
@@ -28,49 +29,19 @@ jobs:
       - name: Generate package-lock.json
         working-directory: apps/web
         run: npm install --package-lock-only --ignore-scripts
-      - name: Switch builds to npm ci
-        shell: python
-        run: |
-          from pathlib import Path
-
-          replacements = {
-              Path("apps/web/Dockerfile"): [
-                  ("COPY package.json ./", "COPY package.json package-lock.json ./"),
-                  ("RUN npm install", "RUN npm ci"),
-              ],
-              Path("apps/web/Dockerfile.prod"): [
-                  ("COPY package.json ./", "COPY package.json package-lock.json ./"),
-                  ("RUN npm install", "RUN npm ci"),
-              ],
-              Path(".github/workflows/ci.yml"): [
-                  ("run: npm install", "run: npm ci"),
-              ],
-              Path(".github/workflows/release.yml"): [
-                  ("run: npm install", "run: npm ci"),
-              ],
-              Path("README.md"): [
-                  ("cd apps/web\nnpm install\nnpm run dev", "cd apps/web\nnpm ci\nnpm run dev"),
-              ],
-          }
-
-          for path, edits in replacements.items():
-              text = path.read_text()
-              for old, new in edits:
-                  if old not in text:
-                      raise SystemExit(f"Expected text not found in {path}: {old!r}")
-                  text = text.replace(old, new)
-              path.write_text(text)
       - name: Verify lockfile can drive install
         working-directory: apps/web
         run: npm ci --ignore-scripts
-      - name: Remove one-time finalizer
-        run: rm .github/workflows/finalize-frontend-lockfile.yml
-      - name: Commit final dependency state
+      - name: Commit package lock
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "build(web): lock npm dependencies and use npm ci"
+          git add apps/web/package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json is already current"
+            exit 0
+          fi
+          git commit -m "build(web): lock npm dependencies"
           git push
