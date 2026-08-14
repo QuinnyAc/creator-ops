@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Node / Next.js
 node_modules/
@@ -32,3 +33,5 @@ Thumbs.db
 
 # Local data
 postgres_data/
+backups/
+*.dump
