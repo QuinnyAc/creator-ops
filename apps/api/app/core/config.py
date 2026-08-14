@@ -16,12 +16,14 @@ class Settings(BaseSettings):
         "postgresql+psycopg://creator_ops:creator_ops@localhost:5432/creator_ops"
     )
     cors_origins: str = "http://localhost:3000"
+    public_web_url: str = "http://localhost:3000"
     default_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     allow_dev_user_fallback: bool = True
     jwt_secret_key: str = DEVELOPMENT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
-    youtube_api_key: str = ""
+    bilibili_client_id: str = ""
+    bilibili_app_secret: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -32,6 +34,18 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def normalized_public_web_url(self) -> str:
+        return self.public_web_url.rstrip("/")
+
+    @property
+    def bilibili_callback_url(self) -> str:
+        return f"{self.normalized_public_web_url}{self.api_v1_prefix}/bilibili/oauth/callback"
+
+    @property
+    def bilibili_configured(self) -> bool:
+        return bool(self.bilibili_client_id and self.bilibili_app_secret)
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
