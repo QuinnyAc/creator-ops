@@ -106,7 +106,18 @@ def delete_platform_account(
         )
     )
     if account is None:
-        raise HTTPException(status_code=404, detail="Platform account not found.")
+        raise HTTPException(status_code=404, detail="平台账号不存在。")
+    publication_count = int(
+        db.scalar(
+            select(func.count(Publication.id)).where(Publication.platform_account_id == account.id)
+        )
+        or 0
+    )
+    if publication_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"这个账号还有 {publication_count} 条视频记录。请先删除这些视频，再删除账号。",
+        )
     db.delete(account)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
