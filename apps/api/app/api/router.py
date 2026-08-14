@@ -7,6 +7,7 @@ from app.api.routes import (
     dashboard,
     data_exports,
     data_imports,
+    idea_memos,
     inspirations,
     insight_exports,
     insights,
@@ -25,6 +26,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(settings.router)
+api_router.include_router(idea_memos.router)
 api_router.include_router(inspirations.router)
 api_router.include_router(topics.router)
 api_router.include_router(contents.router)
