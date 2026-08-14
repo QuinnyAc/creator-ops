@@ -1,4 +1,4 @@
-.PHONY: dev down reset demo test test-api typecheck build-web prod-config prod-build prod-up prod-down
+.PHONY: dev down reset demo test test-api typecheck build-web prod-config prod-build prod-up prod-down backup restore
 
 PROD_ENV ?= .env.production
 
@@ -36,3 +36,10 @@ prod-up:
 
 prod-down:
 	docker compose --env-file $(PROD_ENV) -f docker-compose.prod.yml down
+
+backup:
+	./scripts/backup-postgres.sh
+
+restore:
+	@test -n "$(BACKUP)" || (echo "Usage: make restore BACKUP=backups/creator-ops-YYYYMMDDTHHMMSSZ.dump" >&2; exit 2)
+	CREATOR_OPS_RESTORE_CONFIRM=YES ./scripts/restore-postgres.sh "$(BACKUP)"
