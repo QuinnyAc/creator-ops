@@ -33,6 +33,19 @@ export type PillarAnalyticsItem = {
   follower_conversion_rate: number;
 };
 
+export type PillarTrendItem = {
+  pillar_id: string;
+  pillar_name: string;
+  recent_publications: number;
+  previous_publications: number;
+  recent_avg_views: number;
+  previous_avg_views: number;
+  view_change_percent: number | null;
+  recent_favorite_rate: number;
+  previous_favorite_rate: number;
+  signal: "rising" | "stable" | "falling" | "new" | "insufficient";
+};
+
 export type PlatformAnalyticsItem = {
   platform_id: string;
   platform_slug: string;
