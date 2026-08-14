@@ -17,7 +17,7 @@ Generic databases are excellent at storing rows. Creator Ops is opinionated abou
 - manage the content lifecycle instead of a generic task lifecycle;
 - separate reusable `Content` from each platform-specific `Publication`;
 - preserve metric snapshots instead of overwriting yesterday's numbers;
-- compare Content Pillars, platforms, title patterns, and recent interest changes;
+- compare Content Pillars, tags, platforms, title patterns, and recent interest changes;
 - turn a one-off review into a reusable Creator Playbook insight.
 
 ## Current MVP
@@ -34,6 +34,7 @@ The repository includes a working end-to-end product foundation for:
 - bulk CSV metric import with idempotent snapshot upserts;
 - CSV exports for topics, content, publications, reviews, and Playbook insights;
 - Content Pillar performance comparisons;
+- tag-level performance comparisons across reach, engagement, saves, and follower conversion;
 - recent-vs-previous Content Pillar interest trend signals;
 - platform performance comparisons;
 - title-pattern analysis for packaging learnings;
@@ -79,11 +80,14 @@ A single `Content` can have multiple `Publication` records. The same core idea c
 Creator Ops avoids dashboards that only report vanity totals. The analytics layer is designed to answer operational questions:
 
 - Which Content Pillars perform best?
+- Which recurring tags correlate with stronger reach, saves, engagement, or follower conversion?
 - Is audience interest in a Content Pillar rising or falling?
 - Which platform is more efficient for this creator?
 - Which title patterns correlate with stronger outcomes?
 - Did this content beat the creator's own baseline?
 - What should change in the next iteration?
+
+Tag analytics are intentionally non-additive: a Content can carry multiple tags, so tag totals may overlap. The goal is comparative learning, not reconciliation against account totals.
 
 The first review assistant is deliberately rule-based and transparent. It does not require a proprietary LLM to create useful feedback, and it never overwrites the creator's review without an explicit action.
 
@@ -229,6 +233,7 @@ See [`docs/deployment.md`](docs/deployment.md) for the production checklist.
 ### P1 — creator analytics
 
 - [x] Content Pillar performance comparisons
+- [x] Tag-level performance analytics
 - [x] Content Pillar interest trend signals
 - [x] Platform performance comparisons
 - [x] 24h / 72h / 7d / 30d performance views
