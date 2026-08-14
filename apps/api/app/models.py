@@ -186,6 +186,28 @@ class PlatformAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     handle: Mapped[str | None] = mapped_column(String(160))
 
 
+class PlatformAccountAuth(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "platform_account_auth"
+    __table_args__ = (
+        UniqueConstraint(
+            "platform_account_id",
+            name="uq_platform_account_auth_account",
+        ),
+    )
+
+    platform_account_id: Mapped[UUID] = mapped_column(
+        ForeignKey("platform_accounts.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(48), nullable=False)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scopes: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+
+
 class Publication(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "publications"
 
