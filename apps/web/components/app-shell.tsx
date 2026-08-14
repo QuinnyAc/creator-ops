@@ -18,6 +18,7 @@ import { clearAccessToken, getAccessToken } from "@/lib/auth";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: HomeIcon },
+  { href: "/memos", label: "灵感备忘录", icon: SparkIcon },
   { href: "/inspirations", label: "灵感 Inbox", icon: SparkIcon },
   { href: "/topics", label: "选题库", icon: TopicIcon },
   { href: "/content", label: "内容 Pipeline", icon: PipelineIcon },
