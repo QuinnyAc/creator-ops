@@ -2,13 +2,37 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
-import { EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
+import { EmptyState, ErrorBanner, PageHeader, Section, formatNumber } from "@/components/ui";
 import { ApiError, api, postJson, putJson } from "@/lib/api";
 import type { ContentItem, Insight, Review } from "@/lib/types";
 
 type ReviewDraft = {
   goal: string;
   expected_outcome: string;
+  what_worked: string;
+  what_didnt_work: string;
+  learnings: string;
+  next_action: string;
+};
+
+type ReviewMetricsSummary = {
+  publications: number;
+  views: number;
+  likes: number;
+  comments: number;
+  favorites: number;
+  shares: number;
+  followers_gained: number;
+  avg_views: number;
+  engagement_rate: number;
+  favorite_rate: number;
+  follower_conversion_rate: number;
+};
+
+type ReviewSuggestion = {
+  metrics: ReviewMetricsSummary;
+  baseline: ReviewMetricsSummary;
+  title_patterns: string[];
   what_worked: string;
   what_didnt_work: string;
   learnings: string;
@@ -28,8 +52,10 @@ export default function ReviewsPage() {
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<ReviewDraft>(EMPTY_REVIEW);
+  const [suggestion, setSuggestion] = useState<ReviewSuggestion | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [saved, setSaved] = useState(false);
   const [promoted, setPromoted] = useState(false);
 
@@ -47,10 +73,12 @@ export default function ReviewsPage() {
   const loadReview = useCallback(async (contentId: string) => {
     if (!contentId) {
       setDraft(EMPTY_REVIEW);
+      setSuggestion(null);
       return;
     }
     setSaved(false);
     setPromoted(false);
+    setSuggestion(null);
     try {
       const review = await api<Review>(`/reviews/content/${contentId}`);
       setDraft({
@@ -101,6 +129,32 @@ export default function ReviewsPage() {
     }
   }
 
+  async function generateSuggestion() {
+    if (!selectedId) return;
+    setLoadingSuggestion(true);
+    setError("");
+    try {
+      setSuggestion(await api<ReviewSuggestion>(`/reviews/content/${selectedId}/suggestions`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "数据复盘建议生成失败");
+    } finally {
+      setLoadingSuggestion(false);
+    }
+  }
+
+  function applySuggestion() {
+    if (!suggestion) return;
+    setDraft((current) => ({
+      ...current,
+      what_worked: suggestion.what_worked,
+      what_didnt_work: suggestion.what_didnt_work,
+      learnings: suggestion.learnings,
+      next_action: suggestion.next_action,
+    }));
+    setSaved(false);
+    setPromoted(false);
+  }
+
   async function promoteToPlaybook() {
     if (!selectedId || !draft.learnings.trim()) return;
     setSaving(true);
@@ -141,6 +195,37 @@ export default function ReviewsPage() {
                 {contents.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.status}</option>)}
               </select>
             </div>
+          </Section>
+
+          <Section
+            title="数据辅助复盘"
+            description="透明规则引擎会比较该内容与账号整体基线，并识别标题模式；建议只是初稿，不会自动覆盖人工判断。"
+            action={<button className="button small secondary" type="button" disabled={loadingSuggestion} onClick={() => void generateSuggestion()}>{loadingSuggestion ? "分析中…" : "生成数据建议"}</button>}
+          >
+            {!suggestion ? (
+              <EmptyState>点击“生成数据建议”，系统会读取该 Content 各 Publication 的最新快照。</EmptyState>
+            ) : (
+              <>
+                <div className="metricGrid">
+                  <div className="metricBox"><span>平均浏览</span><strong>{formatNumber(Math.round(suggestion.metrics.avg_views))}</strong><div className="dataRowMeta">基线 {formatNumber(Math.round(suggestion.baseline.avg_views))}</div></div>
+                  <div className="metricBox"><span>互动率</span><strong>{suggestion.metrics.engagement_rate}%</strong><div className="dataRowMeta">基线 {suggestion.baseline.engagement_rate}%</div></div>
+                  <div className="metricBox"><span>收藏率</span><strong>{suggestion.metrics.favorite_rate}%</strong><div className="dataRowMeta">基线 {suggestion.baseline.favorite_rate}%</div></div>
+                  <div className="metricBox"><span>转粉率</span><strong>{suggestion.metrics.follower_conversion_rate}%</strong><div className="dataRowMeta">基线 {suggestion.baseline.follower_conversion_rate}%</div></div>
+                </div>
+                <div className="dataRowMeta" style={{ marginTop: 12 }}>
+                  {suggestion.metrics.publications} 个有数据的发布实例 · 标题模式：{suggestion.title_patterns.join("、") || "未识别"}
+                </div>
+                <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                  <div className="dataRow"><div><div className="dataRowTitle">做得好的地方</div><div style={{ whiteSpace: "pre-wrap", marginTop: 5 }}>{suggestion.what_worked}</div></div></div>
+                  <div className="dataRow"><div><div className="dataRowTitle">可能的不足</div><div style={{ whiteSpace: "pre-wrap", marginTop: 5 }}>{suggestion.what_didnt_work}</div></div></div>
+                  <div className="dataRow"><div><div className="dataRowTitle">建议 Learnings</div><div style={{ whiteSpace: "pre-wrap", marginTop: 5 }}>{suggestion.learnings}</div></div></div>
+                  <div className="dataRow"><div><div className="dataRowTitle">建议 Next Action</div><div style={{ whiteSpace: "pre-wrap", marginTop: 5 }}>{suggestion.next_action}</div></div></div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                  <button className="button small" type="button" onClick={applySuggestion}>填入复盘草稿</button>
+                </div>
+              </>
+            )}
           </Section>
 
           <div className="twoColumns">
