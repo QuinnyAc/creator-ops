@@ -29,6 +29,7 @@ if [[ "${CODESPACES:-false}" == "true" ]]; then
   WEB_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
 
   set_env "CORS_ORIGINS" "$WEB_URL"
+  set_env "PUBLIC_WEB_URL" "$WEB_URL"
   set_env "NEXT_PUBLIC_API_URL" "$WEB_URL"
   set_env "API_INTERNAL_URL" "http://api:8000"
   set_env "ALLOW_DEV_USER_FALLBACK" "false"
