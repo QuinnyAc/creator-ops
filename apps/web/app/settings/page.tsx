@@ -15,6 +15,17 @@ const EXPORTS = [
   { key: "insights", label: "Creator Playbook", path: "/exports/insights.csv", filename: "creator-ops-insights.csv" },
 ];
 
+const TIMEZONES = [
+  "Asia/Shanghai",
+  "Asia/Hong_Kong",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "UTC",
+  "Europe/London",
+  "America/New_York",
+  "America/Los_Angeles",
+];
+
 type MetricImportResult = {
   imported: number;
   updated: number;
@@ -22,7 +33,19 @@ type MetricImportResult = {
   errors: string[];
 };
 
+type AuthUser = {
+  id: string;
+  email: string;
+  display_name: string;
+  timezone: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function SettingsPage() {
+  const [profile, setProfile] = useState<AuthUser | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [timezone, setTimezone] = useState("Asia/Shanghai");
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [pillarName, setPillarName] = useState("");
@@ -30,16 +53,22 @@ export default function SettingsPage() {
   const [tagName, setTagName] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
   const [exporting, setExporting] = useState("");
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<MetricImportResult | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [nextPillars, nextTags] = await Promise.all([
+      const [nextProfile, nextPillars, nextTags] = await Promise.all([
+        api<AuthUser>("/auth/me"),
         api<ContentPillar[]>("/content-pillars"),
         api<Tag[]>("/tags"),
       ]);
+      setProfile(nextProfile);
+      setDisplayName(nextProfile.display_name);
+      setTimezone(nextProfile.timezone);
       setPillars(nextPillars);
       setTags(nextTags);
     } catch (err) {
@@ -50,6 +79,31 @@ export default function SettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function saveProfile(event: FormEvent) {
+    event.preventDefault();
+    if (!displayName.trim() || !timezone.trim()) return;
+    setProfileSaving(true);
+    setProfileSaved(false);
+    setError("");
+    try {
+      const nextProfile = await api<AuthUser>("/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          display_name: displayName.trim(),
+          timezone: timezone.trim(),
+        }),
+      });
+      setProfile(nextProfile);
+      setDisplayName(nextProfile.display_name);
+      setTimezone(nextProfile.timezone);
+      setProfileSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Creator Profile 保存失败");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   async function addPillar(event: FormEvent) {
     event.preventDefault();
@@ -136,9 +190,59 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="SYSTEM"
         title="工作台设置"
-        description="Content Pillar 是长期战略分类；Tag 是灵活描述标签，两者不要混成一件事。"
+        description="配置创作者身份、时区、Content Pillars、Tags 和数据迁移能力。"
       />
       {error ? <ErrorBanner message={error} /> : null}
+
+      <Section
+        title="Creator Profile"
+        description="这里的时区是 Creator Ops 的工作台时区来源，为发布日历、计划发布时间和后续自动化提供统一上下文。"
+      >
+        <form className="formGrid three" onSubmit={saveProfile}>
+          <div className="field">
+            <label htmlFor="profile-name">显示名称</label>
+            <input
+              id="profile-name"
+              className="input"
+              value={displayName}
+              onChange={(event) => {
+                setDisplayName(event.target.value);
+                setProfileSaved(false);
+              }}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="profile-email">邮箱</label>
+            <input id="profile-email" className="input" value={profile?.email ?? ""} disabled readOnly />
+          </div>
+          <div className="field">
+            <label htmlFor="profile-timezone">工作台时区</label>
+            <select
+              id="profile-timezone"
+              className="select"
+              value={timezone}
+              onChange={(event) => {
+                setTimezone(event.target.value);
+                setProfileSaved(false);
+              }}
+            >
+              {!TIMEZONES.includes(timezone) && timezone ? <option value={timezone}>{timezone}</option> : null}
+              {TIMEZONES.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </div>
+          <div className="formActions">
+            {profileSaved ? <span className="muted">Profile 已保存</span> : null}
+            <button className="button" disabled={profileSaving || !displayName.trim() || !timezone.trim()} type="submit">
+              {profileSaving ? "保存中…" : "保存 Profile"}
+            </button>
+          </div>
+        </form>
+        <p className="dataRowMeta" style={{ marginTop: 12 }}>
+          当前日期输入仍由浏览器负责本地展示；工作台时区已经持久化，后续日历格式化和平台定时发布会以它为统一来源。
+        </p>
+      </Section>
+
+      <div style={{ height: 16 }} />
 
       <div className="twoColumns">
         <Section title="Content Pillars" description="用于长期分析的稳定内容支柱，例如 AI 工具、AI 教程、AI 创业。">
