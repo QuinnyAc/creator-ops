@@ -51,6 +51,10 @@ jobs:
           alembic upgrade head
       - name: Run tests
         run: pytest
+      - name: Verify demo seed is executable and idempotent
+        run: |
+          python -m app.demo_seed
+          python -m app.demo_seed
 
   frontend:
     name: Frontend
