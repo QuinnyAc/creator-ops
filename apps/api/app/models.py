@@ -58,6 +58,16 @@ class Inspiration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class IdeaMemo(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "idea_memos"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class ContentPillar(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "content_pillars"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_content_pillars_user_name"),)
