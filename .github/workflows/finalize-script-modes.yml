@@ -1,0 +1,33 @@
+name: Finalize operational script modes
+
+on:
+  push:
+    branches:
+      - ops/database-backup-restore-v2
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-operational-script-modes
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mark operational scripts executable
+        run: chmod +x scripts/backup-postgres.sh scripts/restore-postgres.sh
+      - name: Remove one-time mode workflow
+        run: rm .github/workflows/finalize-script-modes.yml
+      - name: Commit file modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "ops: mark database scripts executable"
+          git push
