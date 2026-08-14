@@ -92,6 +92,25 @@ class InspirationRead(ORMModel):
     updated_at: datetime
 
 
+class IdeaMemoCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=240)
+    body: str = Field(min_length=1)
+
+
+class IdeaMemoUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=240)
+    body: str | None = Field(default=None, min_length=1)
+
+
+class IdeaMemoRead(ORMModel):
+    id: UUID
+    user_id: UUID
+    title: str
+    body: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class TopicCreate(BaseModel):
     title: str = Field(min_length=1, max_length=240)
     inspiration_id: UUID | None = None
