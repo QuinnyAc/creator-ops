@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebarFooter">
           <span className="statusDot" />
-          {authenticated ? "Authenticated workspace" : "Local MVP workspace"}
+          {authenticated ? "Workplace" : "Local MVP workspace"}
         </div>
       </aside>
       <main className="workspace">
