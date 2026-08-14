@@ -6,6 +6,7 @@ from app.api.routes import (
     contents,
     dashboard,
     data_exports,
+    data_imports,
     inspirations,
     insight_exports,
     insights,
@@ -28,5 +29,6 @@ api_router.include_router(analytics.router)
 api_router.include_router(title_analytics.router)
 api_router.include_router(data_exports.router)
 api_router.include_router(insight_exports.router)
+api_router.include_router(data_imports.router)
 api_router.include_router(insights.router)
 api_router.include_router(reviews.router)
