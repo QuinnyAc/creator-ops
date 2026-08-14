@@ -12,6 +12,7 @@ const EXPORTS = [
   { key: "contents", label: "内容资产", path: "/exports/contents.csv", filename: "creator-ops-contents.csv" },
   { key: "publications", label: "发布 + 最新数据", path: "/exports/publications.csv", filename: "creator-ops-publications.csv" },
   { key: "reviews", label: "内容复盘", path: "/exports/reviews.csv", filename: "creator-ops-reviews.csv" },
+  { key: "insights", label: "Creator Playbook", path: "/exports/insights.csv", filename: "creator-ops-insights.csv" },
 ];
 
 export default function SettingsPage() {
