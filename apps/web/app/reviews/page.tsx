@@ -3,8 +3,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
-import { ApiError, api, putJson } from "@/lib/api";
-import type { ContentItem, Review } from "@/lib/types";
+import { ApiError, api, postJson, putJson } from "@/lib/api";
+import type { ContentItem, Insight, Review } from "@/lib/types";
 
 type ReviewDraft = {
   goal: string;
@@ -31,6 +31,7 @@ export default function ReviewsPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [promoted, setPromoted] = useState(false);
 
   const loadContents = useCallback(async () => {
     try {
@@ -49,6 +50,7 @@ export default function ReviewsPage() {
       return;
     }
     setSaved(false);
+    setPromoted(false);
     try {
       const review = await api<Review>(`/reviews/content/${contentId}`);
       setDraft({
@@ -76,17 +78,44 @@ export default function ReviewsPage() {
     void loadReview(selectedId);
   }, [selectedId, loadReview]);
 
+  async function saveReview() {
+    if (!selectedId) return null;
+    const review = await putJson<Review>(`/reviews/content/${selectedId}`, draft);
+    setSaved(true);
+    return review;
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!selectedId) return;
     setSaving(true);
     setSaved(false);
+    setPromoted(false);
     setError("");
     try {
-      await putJson<Review>(`/reviews/content/${selectedId}`, draft);
-      setSaved(true);
+      await saveReview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "复盘保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function promoteToPlaybook() {
+    if (!selectedId || !draft.learnings.trim()) return;
+    setSaving(true);
+    setError("");
+    setPromoted(false);
+    try {
+      await saveReview();
+      const content = contents.find((item) => item.id === selectedId);
+      await postJson<Insight>(`/insights/from-content/${selectedId}`, {
+        title: content ? `${content.title} · 核心经验` : undefined,
+        category: "content-learning",
+      });
+      setPromoted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "沉淀到 Playbook 失败");
     } finally {
       setSaving(false);
     }
@@ -133,16 +162,20 @@ export default function ReviewsPage() {
           </div>
 
           <div className="twoColumns">
-            <Section title="5. Learnings" description="从这条内容学到了什么？">
-              <textarea className="textarea" style={{ minHeight: 170 }} value={draft.learnings} onChange={(e) => setDraft({ ...draft, learnings: e.target.value })} placeholder="沉淀为可复用的方法论" />
+            <Section title="5. Learnings" description="从这条内容学到了什么？可以一键沉淀到 Creator Playbook。">
+              <textarea className="textarea" style={{ minHeight: 170 }} value={draft.learnings} onChange={(e) => { setDraft({ ...draft, learnings: e.target.value }); setPromoted(false); }} placeholder="沉淀为可复用的方法论" />
             </Section>
             <Section title="6. Next Action" description="把复盘重新送回下一轮创作。">
               <textarea className="textarea" style={{ minHeight: 170 }} value={draft.next_action} onChange={(e) => setDraft({ ...draft, next_action: e.target.value })} placeholder="继续做系列 / 换角度 / 优化标题 / 停止该方向…" />
             </Section>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             {saved ? <span className="muted">复盘已保存</span> : null}
+            {promoted ? <span className="muted">已沉淀到 Creator Playbook</span> : null}
+            <button className="button secondary" type="button" disabled={saving || !draft.learnings.trim()} onClick={() => void promoteToPlaybook()}>
+              沉淀到 Playbook
+            </button>
             <button className="button" type="submit" disabled={saving}>{saving ? "保存中…" : "保存复盘"}</button>
           </div>
         </form>
