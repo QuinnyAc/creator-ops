@@ -90,6 +90,7 @@ jobs:
           POSTGRES_PASSWORD: ci-production-password
           JWT_SECRET_KEY: ci-production-jwt-secret-at-least-32-bytes
           CORS_ORIGINS: https://creator.example.com
+          PUBLIC_WEB_URL: https://creator.example.com
           NEXT_PUBLIC_API_URL: https://api.creator.example.com
         run: docker compose -f docker-compose.prod.yml config >/dev/null
       - name: Build API production image
