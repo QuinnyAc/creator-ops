@@ -9,6 +9,7 @@ description = "FastAPI backend for Creator Ops"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.14",
+  "cryptography>=45,<46",
   "fastapi>=0.115",
   "psycopg[binary]>=3.2",
   "pwdlib[argon2]>=0.2,<1",
