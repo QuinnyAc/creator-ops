@@ -1,3 +1,4 @@
+from collections import defaultdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -10,13 +11,12 @@ from app.models import ContentPillar, Tag, Topic, TopicScore, topic_tags
 from app.schemas import (
     TagRead,
     TopicCreate,
-    TopicListItem,
     TopicRead,
     TopicScoreInput,
     TopicScoreRead,
     TopicUpdate,
 )
-from app.schemas_taxonomy import TagAssignment
+from app.schemas_taxonomy import TagAssignment, TopicLibraryItem
 from app.services.scoring import calculate_topic_scores
 from app.services.taxonomy import get_owned_tags
 
@@ -43,22 +43,35 @@ def _validate_pillar(db: Session, pillar_id: UUID | None, user_id: UUID) -> None
         raise HTTPException(status_code=400, detail="Content pillar does not belong to user.")
 
 
-@router.get("", response_model=list[TopicListItem])
+@router.get("", response_model=list[TopicLibraryItem])
 def list_topics(
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
-) -> list[TopicListItem]:
+) -> list[TopicLibraryItem]:
     rows = db.execute(
         select(Topic, TopicScore)
         .outerjoin(TopicScore, TopicScore.topic_id == Topic.id)
         .where(Topic.user_id == user_id)
         .order_by(Topic.created_at.desc())
     ).all()
+
+    tags_by_topic: dict[UUID, list[TagRead]] = defaultdict(list)
+    tag_rows = db.execute(
+        select(topic_tags.c.topic_id, Tag)
+        .join(Tag, Tag.id == topic_tags.c.tag_id)
+        .join(Topic, Topic.id == topic_tags.c.topic_id)
+        .where(Topic.user_id == user_id, Tag.user_id == user_id)
+        .order_by(Tag.name)
+    ).all()
+    for topic_id, tag in tag_rows:
+        tags_by_topic[topic_id].append(TagRead.model_validate(tag))
+
     return [
-        TopicListItem(
+        TopicLibraryItem(
             **TopicRead.model_validate(topic).model_dump(),
             opportunity_score=score.opportunity_score if score else None,
             priority_score=score.priority_score if score else None,
+            tags=tags_by_topic.get(topic.id, []),
         )
         for topic, score in rows
     ]

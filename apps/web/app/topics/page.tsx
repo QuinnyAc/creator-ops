@@ -16,7 +16,19 @@ const SCORE_FIELDS = [
   ["production_effort", "制作难度"],
 ] as const;
 
+const TOPIC_STATUSES = [
+  "evaluating",
+  "approved",
+  "scheduled",
+  "in_production",
+  "completed",
+  "rejected",
+  "archived",
+];
+
 type ScoreForm = Record<(typeof SCORE_FIELDS)[number][0], number>;
+type TopicLibraryItem = Topic & { tags: Tag[] };
+
 const DEFAULT_SCORE: ScoreForm = {
   pain_point: 3,
   search_demand: 3,
@@ -27,24 +39,28 @@ const DEFAULT_SCORE: ScoreForm = {
 };
 
 export default function TopicsPage() {
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topics, setTopics] = useState<TopicLibraryItem[]>([]);
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [title, setTitle] = useState("");
   const [coreIdea, setCoreIdea] = useState("");
   const [pillarId, setPillarId] = useState("");
   const [goal, setGoal] = useState("growth");
-  const [selected, setSelected] = useState<Topic | null>(null);
+  const [selected, setSelected] = useState<TopicLibraryItem | null>(null);
   const [score, setScore] = useState<ScoreForm>(DEFAULT_SCORE);
   const [savedScore, setSavedScore] = useState<TopicScore | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [filterPillarId, setFilterPillarId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterTagId, setFilterTagId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const [nextTopics, nextPillars, nextTags] = await Promise.all([
-        api<Topic[]>("/topics"),
+        api<TopicLibraryItem[]>("/topics"),
         api<ContentPillar[]>("/content-pillars"),
         api<Tag[]>("/tags"),
       ]);
@@ -67,6 +83,30 @@ export default function TopicsPage() {
     () => new Map(pillars.map((pillar) => [pillar.id, pillar.name])),
     [pillars],
   );
+
+  const filteredTopics = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return topics.filter((topic) => {
+      if (filterPillarId && topic.pillar_id !== filterPillarId) return false;
+      if (filterStatus && topic.status !== filterStatus) return false;
+      if (filterTagId && !topic.tags.some((tag) => tag.id === filterTagId)) return false;
+      if (!normalizedQuery) return true;
+
+      const searchable = [
+        topic.title,
+        topic.core_idea ?? "",
+        topic.target_audience ?? "",
+        topic.user_problem ?? "",
+        topic.angle ?? "",
+        ...topic.tags.map((tag) => tag.name),
+      ]
+        .join(" ")
+        .toLocaleLowerCase();
+      return searchable.includes(normalizedQuery);
+    });
+  }, [filterPillarId, filterStatus, filterTagId, query, topics]);
+
+  const hasFilters = Boolean(query || filterPillarId || filterStatus || filterTagId);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -100,26 +140,15 @@ export default function TopicsPage() {
     }
   }
 
-  async function openScore(topic: Topic) {
+  async function openScore(topic: TopicLibraryItem) {
     setSelected(topic);
     setSavedScore(null);
     setScore(DEFAULT_SCORE);
-    setSelectedTagIds([]);
+    setSelectedTagIds(topic.tags.map((tag) => tag.id));
     setError("");
 
-    const [tagResult, scoreResult] = await Promise.allSettled([
-      api<Tag[]>(`/topics/${topic.id}/tags`),
-      api<TopicScore>(`/topics/${topic.id}/score`),
-    ]);
-
-    if (tagResult.status === "fulfilled") {
-      setSelectedTagIds(tagResult.value.map((tag) => tag.id));
-    } else {
-      setError(tagResult.reason instanceof Error ? tagResult.reason.message : "标签加载失败");
-    }
-
-    if (scoreResult.status === "fulfilled") {
-      const existing = scoreResult.value;
+    try {
+      const existing = await api<TopicScore>(`/topics/${topic.id}/score`);
       setSavedScore(existing);
       setScore({
         pain_point: existing.pain_point,
@@ -129,8 +158,10 @@ export default function TopicsPage() {
         commercial_value: existing.commercial_value,
         production_effort: existing.production_effort,
       });
-    } else if (!(scoreResult.reason instanceof ApiError && scoreResult.reason.status === 404)) {
-      setError(scoreResult.reason instanceof Error ? scoreResult.reason.message : "评分加载失败");
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) {
+        setError(err instanceof Error ? err.message : "评分加载失败");
+      }
     }
   }
 
@@ -138,6 +169,13 @@ export default function TopicsPage() {
     setSelectedTagIds((current) =>
       current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId],
     );
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setFilterPillarId("");
+    setFilterStatus("");
+    setFilterTagId("");
   }
 
   async function saveDecision() {
@@ -200,25 +238,72 @@ export default function TopicsPage() {
         </div>
       </form>
 
+      <div className="formCard" style={{ marginBottom: 16 }}>
+        <div className="sectionHeading">
+          <div>
+            <h2>筛选选题</h2>
+            <p>按关键词、内容支柱、状态和标签快速找到下一批值得推进的题。</p>
+          </div>
+          {hasFilters ? <button className="button small secondary" type="button" onClick={clearFilters}>清除筛选</button> : null}
+        </div>
+        <div className="formGrid four">
+          <div className="field">
+            <label htmlFor="topic-search">关键词</label>
+            <input id="topic-search" className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="标题、观点、用户问题或标签" />
+          </div>
+          <div className="field">
+            <label htmlFor="filter-pillar">内容支柱</label>
+            <select id="filter-pillar" className="select" value={filterPillarId} onChange={(event) => setFilterPillarId(event.target.value)}>
+              <option value="">全部</option>
+              {pillars.map((pillar) => <option key={pillar.id} value={pillar.id}>{pillar.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="filter-status">状态</label>
+            <select id="filter-status" className="select" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+              <option value="">全部</option>
+              {TOPIC_STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="filter-tag">标签</label>
+            <select id="filter-tag" className="select" value={filterTagId} onChange={(event) => setFilterTagId(event.target.value)}>
+              <option value="">全部</option>
+              {tags.map((tag) => <option key={tag.id} value={tag.id}>#{tag.name}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div className="splitGrid">
-        <Section title={`选题数据库 · ${topics.length}`} description="Priority 越高，越值得优先进入生产。">
+        <Section title={`选题数据库 · ${filteredTopics.length}/${topics.length}`} description="Priority 越高，越值得优先进入生产。">
           {topics.length === 0 ? (
             <EmptyState>还没有正式选题。可以从灵感 Inbox 转换，也可以直接创建。</EmptyState>
+          ) : filteredTopics.length === 0 ? (
+            <EmptyState>没有符合当前筛选条件的选题。</EmptyState>
           ) : (
             <div className="tableWrap">
               <table className="table">
                 <thead><tr><th>选题</th><th>内容支柱</th><th>目标</th><th>机会</th><th>Priority</th><th>状态</th><th /></tr></thead>
                 <tbody>
-                  {topics.map((topic) => (
+                  {filteredTopics.map((topic) => (
                     <tr key={topic.id}>
-                      <td><div className="tableTitle">{topic.title}</div><div className="dataRowMeta">{topic.core_idea || "未填写核心观点"}</div></td>
+                      <td>
+                        <div className="tableTitle">{topic.title}</div>
+                        <div className="dataRowMeta">{topic.core_idea || "未填写核心观点"}</div>
+                        {topic.tags.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                            {topic.tags.map((tag) => <span className="kanbanCount" key={tag.id}>#{tag.name}</span>)}
+                          </div>
+                        ) : null}
+                      </td>
                       <td>{topic.pillar_id ? pillarMap.get(topic.pillar_id) ?? "—" : "—"}</td>
                       <td>{topic.goal ?? "—"}</td>
                       <td className="score">{topic.opportunity_score != null ? Number(topic.opportunity_score).toFixed(0) : "—"}</td>
                       <td className={`score ${Number(topic.priority_score ?? 0) >= 70 ? "high" : ""}`}>{topic.priority_score != null ? Number(topic.priority_score).toFixed(0) : "—"}</td>
                       <td>
                         <select className="inlineSelect" value={topic.status} onChange={(e) => void changeStatus(topic, e.target.value)}>
-                          {['evaluating','approved','scheduled','in_production','completed','rejected','archived'].map((value) => <option key={value} value={value}>{value}</option>)}
+                          {TOPIC_STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
                         </select>
                       </td>
                       <td><button className="button small secondary" type="button" onClick={() => void openScore(topic)}>决策</button></td>
