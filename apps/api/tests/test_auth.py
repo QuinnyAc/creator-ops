@@ -31,14 +31,30 @@ def test_register_login_and_authenticated_me() -> None:
         assert registration["token_type"] == "bearer"
         assert registration["access_token"]
         assert registration["user"]["email"] == email
+        assert registration["user"]["timezone"] == "Asia/Shanghai"
         user_id = registration["user"]["id"]
+        auth_headers = {"Authorization": f"Bearer {registration['access_token']}"}
 
-        me_response = client.get(
-            "/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {registration['access_token']}"},
-        )
+        me_response = client.get("/api/v1/auth/me", headers=auth_headers)
         assert me_response.status_code == 200, me_response.text
         assert me_response.json()["id"] == user_id
+
+        profile_response = client.patch(
+            "/api/v1/auth/me",
+            headers=auth_headers,
+            json={
+                "display_name": "Updated Integration Creator",
+                "timezone": "Asia/Singapore",
+            },
+        )
+        assert profile_response.status_code == 200, profile_response.text
+        assert profile_response.json()["display_name"] == "Updated Integration Creator"
+        assert profile_response.json()["timezone"] == "Asia/Singapore"
+
+        persisted_profile = client.get("/api/v1/auth/me", headers=auth_headers)
+        assert persisted_profile.status_code == 200, persisted_profile.text
+        assert persisted_profile.json()["display_name"] == "Updated Integration Creator"
+        assert persisted_profile.json()["timezone"] == "Asia/Singapore"
 
         login_response = client.post(
             "/api/v1/auth/login",
@@ -46,6 +62,7 @@ def test_register_login_and_authenticated_me() -> None:
         )
         assert login_response.status_code == 200, login_response.text
         assert login_response.json()["user"]["id"] == user_id
+        assert login_response.json()["user"]["timezone"] == "Asia/Singapore"
 
         wrong_password_response = client.post(
             "/api/v1/auth/login",
