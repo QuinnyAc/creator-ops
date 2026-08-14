@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -5,9 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
+from app.core.config import settings
 from app.db import get_db
-from app.models import Content, Platform, PlatformAccount, Publication
+from app.models import Content, MetricSnapshot, Platform, PlatformAccount, Publication
 from app.schemas import (
+    MetricSnapshotRead,
     PlatformAccountCreate,
     PlatformAccountRead,
     PlatformAccountUpdate,
@@ -16,6 +19,7 @@ from app.schemas import (
     PublicationRead,
     PublicationUpdate,
 )
+from app.services.platform_metrics import PlatformMetricsError, fetch_youtube_metrics
 
 router = APIRouter(tags=["publishing"])
 
@@ -185,6 +189,66 @@ def update_publication(
     db.commit()
     db.refresh(publication)
     return publication
+
+
+@router.post(
+    "/publications/{publication_id}/sync-metrics",
+    response_model=MetricSnapshotRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def sync_publication_metrics(
+    publication_id: UUID,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> MetricSnapshot:
+    publication = _get_owned_publication(db, publication_id, user_id)
+    if not publication.url:
+        raise HTTPException(status_code=400, detail="请先填写已发布作品链接。")
+
+    account = db.get(PlatformAccount, publication.platform_account_id)
+    platform = db.get(Platform, account.platform_id) if account else None
+    if account is None or account.user_id != user_id or platform is None:
+        raise HTTPException(status_code=404, detail="发布平台账号不存在。")
+
+    if platform.slug == "youtube":
+        try:
+            metrics = fetch_youtube_metrics(publication.url, settings.youtube_api_key)
+        except PlatformMetricsError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    elif platform.slug == "bilibili":
+        raise HTTPException(
+            status_code=422,
+            detail="B站自动同步需要接入哔哩哔哩开放平台并获得关联UP主的数据授权，当前尚未配置授权。",
+        )
+    elif platform.slug == "xiaohongshu":
+        raise HTTPException(
+            status_code=422,
+            detail="小红书当前未配置可用的官方创作者笔记数据接口，暂不使用网页爬取替代。",
+        )
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{platform.name} 当前尚未配置自动指标同步。",
+        )
+
+    extra_metrics = dict(metrics.extra_metrics)
+    extra_metrics["platform_slug"] = platform.slug
+    extra_metrics["sync_mode"] = "official_api"
+    snapshot = MetricSnapshot(
+        publication_id=publication.id,
+        captured_at=datetime.now(timezone.utc),
+        views=metrics.views,
+        likes=metrics.likes,
+        comments=metrics.comments,
+        favorites=metrics.favorites,
+        shares=metrics.shares,
+        followers_gained=0,
+        extra_metrics=extra_metrics,
+    )
+    db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return snapshot
 
 
 @router.delete("/publications/{publication_id}", status_code=status.HTTP_204_NO_CONTENT)
