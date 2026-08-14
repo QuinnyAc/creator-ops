@@ -202,3 +202,15 @@ export type Review = {
   created_at: string;
   updated_at: string;
 };
+
+export type Insight = {
+  id: string;
+  user_id: string;
+  source_review_id: string | null;
+  title: string;
+  body: string;
+  category: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
