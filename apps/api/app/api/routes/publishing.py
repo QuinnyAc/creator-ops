@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
@@ -133,6 +133,35 @@ def list_publications(
             .join(Content, Content.id == Publication.content_id)
             .where(Content.user_id == user_id)
             .order_by(Publication.scheduled_at.asc().nullslast(), Publication.created_at.desc())
+        )
+    )
+
+
+@router.get("/publication-metrics/latest", response_model=list[MetricSnapshotRead])
+def list_latest_publication_metrics(
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[MetricSnapshot]:
+    latest_times = (
+        select(
+            MetricSnapshot.publication_id,
+            func.max(MetricSnapshot.captured_at).label("captured_at"),
+        )
+        .group_by(MetricSnapshot.publication_id)
+        .subquery()
+    )
+    return list(
+        db.scalars(
+            select(MetricSnapshot)
+            .join(
+                latest_times,
+                (MetricSnapshot.publication_id == latest_times.c.publication_id)
+                & (MetricSnapshot.captured_at == latest_times.c.captured_at),
+            )
+            .join(Publication, Publication.id == MetricSnapshot.publication_id)
+            .join(Content, Content.id == Publication.content_id)
+            .where(Content.user_id == user_id)
+            .order_by(MetricSnapshot.captured_at.desc())
         )
     )
 
