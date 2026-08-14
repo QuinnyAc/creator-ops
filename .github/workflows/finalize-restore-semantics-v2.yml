@@ -1,0 +1,207 @@
+name: Finalize restore semantics v2
+
+on:
+  push:
+    branches:
+      - ops/database-backup-restore
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-restore-semantics-v2
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Write final guarded restore implementation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          Path("scripts/restore-postgres.sh").write_text(r'''#!/usr/bin/env bash
+          set -euo pipefail
+
+          BACKUP_PATH="${1:-}"
+          COMPOSE_FILE="${CREATOR_OPS_COMPOSE_FILE:-docker-compose.yml}"
+          ENV_FILE="${CREATOR_OPS_ENV_FILE:-}"
+
+          if [[ -z "${BACKUP_PATH}" ]]; then
+            echo "Usage: CREATOR_OPS_RESTORE_CONFIRM=YES $0 <backup.dump>" >&2
+            exit 2
+          fi
+
+          if [[ ! -f "${BACKUP_PATH}" ]]; then
+            echo "Backup file does not exist: ${BACKUP_PATH}" >&2
+            exit 2
+          fi
+
+          if [[ ! -s "${BACKUP_PATH}" ]]; then
+            echo "Backup file is empty: ${BACKUP_PATH}" >&2
+            exit 2
+          fi
+
+          if [[ "${CREATOR_OPS_RESTORE_CONFIRM:-}" != "YES" ]]; then
+            cat >&2 <<'EOF'
+          Restore refused.
+
+          This operation replaces Creator Ops PostgreSQL data.
+          Re-run with CREATOR_OPS_RESTORE_CONFIRM=YES after verifying the backup path.
+          EOF
+            exit 3
+          fi
+
+          compose=(docker compose -f "${COMPOSE_FILE}")
+          if [[ -n "${ENV_FILE}" ]]; then
+            compose+=(--env-file "${ENV_FILE}")
+          fi
+
+          resume_services() {
+            echo "Starting Creator Ops API and Web services..."
+            "${compose[@]}" start api web >/dev/null 2>&1 || true
+          }
+          trap resume_services EXIT
+
+          echo "Stopping Creator Ops API and Web before restore..."
+          "${compose[@]}" stop api web
+
+          echo "Resetting the public schema before restore..."
+          "${compose[@]}" exec -T db sh -ceu '
+            psql \
+              --username "$POSTGRES_USER" \
+              --dbname "$POSTGRES_DB" \
+              -v ON_ERROR_STOP=1 \
+              -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+          '
+
+          echo "Restoring PostgreSQL from: ${BACKUP_PATH}"
+          "${compose[@]}" exec -T db sh -ceu '
+            pg_restore \
+              --username "$POSTGRES_USER" \
+              --dbname "$POSTGRES_DB" \
+              --no-owner \
+              --no-privileges \
+              --exit-on-error
+          ' < "${BACKUP_PATH}"
+
+          echo "Restore complete. API startup will re-run Alembic migrations if required."
+          ''').replace("          ", "", 1)
+
+          Path(".github/workflows/backup-restore-smoke.yml").write_text(r'''name: Backup restore smoke
+
+          on:
+            pull_request:
+              paths:
+                - "scripts/backup-postgres.sh"
+                - "scripts/restore-postgres.sh"
+                - "docker-compose.yml"
+                - ".github/workflows/backup-restore-smoke.yml"
+
+          permissions:
+            contents: read
+
+          jobs:
+            smoke:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: Start temporary Creator Ops stack
+                  run: |
+                    cp .env.example .env
+                    docker compose up --build -d
+                - name: Wait for API readiness
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    for attempt in {1..60}; do
+                      if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+                        exit 0
+                      fi
+                      if [[ "$attempt" == "60" ]]; then
+                        docker compose logs api db
+                        exit 1
+                      fi
+                      sleep 2
+                    done
+                - name: Create restore marker
+                  run: >-
+                    docker compose exec -T db sh -ceu
+                    'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+                    -v ON_ERROR_STOP=1
+                    -c "CREATE TABLE backup_restore_smoke (id integer PRIMARY KEY, value text NOT NULL);"
+                    -c "INSERT INTO backup_restore_smoke VALUES (1, $$creator-ops-backup-ok$$);"'
+                - name: Backup database
+                  run: ./scripts/backup-postgres.sh /tmp/creator-ops-smoke.dump
+                - name: Destroy marker after backup
+                  run: >-
+                    docker compose exec -T db sh -ceu
+                    'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+                    -v ON_ERROR_STOP=1
+                    -c "DROP TABLE backup_restore_smoke;"'
+                - name: Create post-backup object that must not survive restore
+                  run: >-
+                    docker compose exec -T db sh -ceu
+                    'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+                    -v ON_ERROR_STOP=1
+                    -c "CREATE TABLE post_backup_stale_object (id integer PRIMARY KEY);"'
+                - name: Restore database
+                  env:
+                    CREATOR_OPS_RESTORE_CONFIRM: "YES"
+                  run: ./scripts/restore-postgres.sh /tmp/creator-ops-smoke.dump
+                - name: Verify restored marker
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    value="$(docker compose exec -T db sh -ceu 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atc "SELECT value FROM backup_restore_smoke WHERE id = 1;"')"
+                    test "$value" = "creator-ops-backup-ok"
+                - name: Verify post-backup objects were removed
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    stale="$(docker compose exec -T db sh -ceu 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atc "SELECT to_regclass($$public.post_backup_stale_object$$);"')"
+                    test -z "$stale"
+                - name: Stop temporary stack
+                  if: always()
+                  run: docker compose down -v
+          ''').replace("          ", "", 1)
+
+          docs = Path("docs/backups.md")
+          text = docs.read_text()
+          old = "The restore script:\n\n1. verifies the dump file exists and is non-empty;\n2. refuses to continue without `CREATOR_OPS_RESTORE_CONFIRM=YES`;\n3. stops `api` and `web` to avoid application writes during restore;\n4. runs `pg_restore --clean --if-exists` inside the database container;\n5. restarts API and Web on exit;\n6. relies on normal API startup to apply any migrations newer than the restored database."
+          new = "The restore script:\n\n1. verifies the dump file exists and is non-empty;\n2. refuses to continue without `CREATOR_OPS_RESTORE_CONFIRM=YES`;\n3. stops `api` and `web` to avoid application writes during restore;\n4. drops and recreates the PostgreSQL `public` schema so objects added after the backup cannot survive the restore;\n5. restores the custom-format dump into the clean schema;\n6. restarts API and Web on exit;\n7. relies on normal API startup to apply any migrations newer than the restored database."
+          if old in text:
+              docs.write_text(text.replace(old, new))
+      - name: Remove one-time finalizers
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/fix-backup-smoke.yml \
+            .github/workflows/finalize-restore-semantics.yml \
+            .github/workflows/finalize-restore-semantics-v2.yml
+      - name: Validate final files
+        run: |
+          bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+          python - <<'PY'
+          import pathlib, yaml
+          yaml.safe_load(pathlib.Path('.github/workflows/backup-restore-smoke.yml').read_text())
+          PY
+        env:
+          PYTHONPATH: ""
+      - name: Install YAML parser for validation
+        if: always()
+        run: true
+      - name: Commit final branch state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "ops: restore backups into a clean PostgreSQL schema"
+          git push
