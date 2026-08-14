@@ -16,7 +16,7 @@ class Insight(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
     source_review_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("reviews.id", ondelete="SET NULL"), unique=True, nullable=True
+        ForeignKey("reviews.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
