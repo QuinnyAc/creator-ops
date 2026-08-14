@@ -71,3 +71,26 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+
+  containers:
+    name: Production containers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose config
+        env:
+          POSTGRES_PASSWORD: ci-production-password
+          JWT_SECRET_KEY: ci-production-jwt-secret-at-least-32-bytes
+          CORS_ORIGINS: https://creator.example.com
+          NEXT_PUBLIC_API_URL: https://api.creator.example.com
+        run: docker compose -f docker-compose.prod.yml config >/dev/null
+      - name: Build API production image
+        run: docker build -f apps/api/Dockerfile.prod -t creator-ops-api:ci apps/api
+      - name: Build web production image
+        run: >-
+          docker build
+          --build-arg NEXT_PUBLIC_API_URL=https://api.creator.example.com
+          --build-arg NEXT_PUBLIC_REQUIRE_AUTH=true
+          -f apps/web/Dockerfile.prod
+          -t creator-ops-web:ci
+          apps/web
