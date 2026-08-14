@@ -22,10 +22,12 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-creator_ops}:${POSTGRES_PASSWORD:-creator_ops}@db:5432/${POSTGRES_DB:-creator_ops}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
       ALLOW_DEV_USER_FALLBACK: ${ALLOW_DEV_USER_FALLBACK:-true}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-development-only-change-me}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
-      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      BILIBILI_CLIENT_ID: ${BILIBILI_CLIENT_ID:-}
+      BILIBILI_APP_SECRET: ${BILIBILI_APP_SECRET:-}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
