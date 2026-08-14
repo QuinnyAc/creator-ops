@@ -140,6 +140,24 @@ export type TopicScore = {
   updated_at: string;
 };
 
+export type TopicRecommendation = {
+  topic_id: string;
+  title: string;
+  status: string;
+  pillar_id: string | null;
+  pillar_name: string | null;
+  base_priority_score: number;
+  evidence_adjustment: number;
+  recommended_score: number;
+  evidence_publications: number;
+  pillar_avg_views: number | null;
+  account_avg_views: number | null;
+  pillar_favorite_rate: number | null;
+  account_favorite_rate: number | null;
+  trend_signal: string | null;
+  reasons: string[];
+};
+
 export type ContentItem = {
   id: string;
   user_id: string;
