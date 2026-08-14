@@ -1,4 +1,4 @@
-.PHONY: dev down reset test test-api typecheck build-web prod-config prod-build prod-up prod-down
+.PHONY: dev down reset demo test test-api typecheck build-web prod-config prod-build prod-up prod-down
 
 PROD_ENV ?= .env.production
 
@@ -10,6 +10,9 @@ down:
 
 reset:
 	docker compose down -v
+
+demo:
+	docker compose exec api python -m app.demo_seed
 
 test: test-api typecheck
 
