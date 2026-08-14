@@ -10,6 +10,8 @@ With the normal Docker Compose stack running:
 make backup
 ```
 
+The `backup` and guarded `restore` targets are part of the repository `Makefile`, so the same operator commands are available in local development and documented deployment runbooks.
+
 The default output is a timestamped PostgreSQL custom-format dump:
 
 ```text
@@ -46,6 +48,8 @@ Development convenience target:
 ```bash
 make restore BACKUP=backups/creator-ops-20260814T120000Z.dump
 ```
+
+The Make target requires an explicit `BACKUP=...` path and then supplies the confirmation guard to the underlying restore script. Calling the script directly still requires the confirmation variable yourself.
 
 Direct script usage requires explicit confirmation:
 
