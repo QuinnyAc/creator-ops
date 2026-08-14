@@ -174,7 +174,7 @@ def test_creator_data_is_isolated_between_users() -> None:
             json={
                 "title": "Tenant B content",
                 "content_type": "video",
-                "status": "draft",
+                "status": "research",
             },
         )
         assert content_b_response.status_code == 201, content_b_response.text
