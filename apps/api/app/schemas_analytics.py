@@ -51,6 +51,23 @@ class PlatformAnalyticsItem(BaseModel):
     follower_conversion_rate: float
 
 
+class TagAnalyticsItem(BaseModel):
+    tag_id: UUID
+    tag_name: str
+    contents: int
+    publications: int
+    views: int
+    likes: int
+    comments: int
+    favorites: int
+    shares: int
+    followers_gained: int
+    avg_views: float
+    engagement_rate: float
+    favorite_rate: float
+    follower_conversion_rate: float
+
+
 class PerformanceMilestone(BaseModel):
     label: str
     target_hours: int
