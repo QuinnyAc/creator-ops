@@ -6,7 +6,10 @@ if [[ "${CODESPACES:-false}" != "true" ]]; then
 fi
 
 WEB_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
-API_URL="https://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+
+# Refresh the Codespaces-specific .env on every start so an existing Codespace
+# picks up routing/auth configuration changes without being rebuilt.
+bash .devcontainer/post-create.sh >/dev/null
 
 # Docker-in-Docker can still be starting when Codespaces runs postStartCommand.
 # Wait for the daemon instead of failing the whole application startup.
@@ -28,8 +31,8 @@ fi
 echo "Starting Creator Ops..."
 docker compose up -d --build
 
-# Wait briefly for the web and API listeners so a newly attached user does not
-# open the forwarded URL before the services are actually accepting traffic.
+# Wait for local listeners. Browser traffic only needs the web port; FastAPI is
+# reached by Next.js over the internal Docker network.
 for port in 3000 8000; do
   for _ in $(seq 1 60); do
     if curl -fsS "http://localhost:${port}" >/dev/null 2>&1; then
@@ -39,16 +42,16 @@ for port in 3000 8000; do
   done
 done
 
-# Codespaces can restore forwarded ports as private after lifecycle changes.
-# Try to restore both application ports to public for the shared workspace.
+# Restore the shared web port to public after lifecycle changes. Port 8000 does
+# not need to be public because the web container proxies API requests internally.
 if command -v gh >/dev/null 2>&1; then
-  gh codespace ports visibility 3000:public 8000:public -c "${CODESPACE_NAME}" >/dev/null 2>&1 || true
+  gh codespace ports visibility 3000:public -c "${CODESPACE_NAME}" >/dev/null 2>&1 || true
 fi
 
 cat <<EOF
 
 Creator Ops is ready in GitHub Codespaces.
 Web: ${WEB_URL}
-API: ${API_URL}
+API: proxied through ${WEB_URL}/api/v1
 
 EOF
