@@ -49,9 +49,11 @@ This checklist defines the public open-source v0.1.0 release standard for Creato
 - [x] Architecture, database, API, deployment, backup, security, and brand documentation
 - [x] Real product screenshots captured from the application
 - [x] Screenshot-based Product Tour
-- [x] Semantic tag-driven release workflow
-- [ ] `v0.1.0` tag and GitHub Release published
+- [x] Semantic tag-driven release workflow for future releases
+- [x] `v0.1.0` tag and GitHub Release published
 
-## Release rule
+## Release result
 
-The release tag must point to the final `main` commit after every release-blocking item above is complete. The tag-driven Release workflow must then validate backend migrations/tests, demo seeding, frontend typecheck/build, and production containers before the GitHub Release is considered complete.
+`v0.1.0` was published from commit `e7aebb4712338ba070f803a29d633b2d78003baa` after backend migrations/tests, demo-seed idempotence, reproducible frontend install, high-severity npm audit, typecheck/build, and production-container validation all passed. The bootstrap workflow also verified that the published tag points to that exact commit.
+
+Future versions use the repository's tag-driven Release workflow, which repeats the release-critical validation before creating the GitHub Release.
