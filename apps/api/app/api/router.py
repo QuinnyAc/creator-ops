@@ -11,6 +11,7 @@ from app.api.routes import (
     insight_exports,
     insights,
     publishing,
+    review_assistant,
     reviews,
     settings,
     title_analytics,
@@ -31,4 +32,5 @@ api_router.include_router(data_exports.router)
 api_router.include_router(insight_exports.router)
 api_router.include_router(data_imports.router)
 api_router.include_router(insights.router)
+api_router.include_router(review_assistant.router)
 api_router.include_router(reviews.router)
