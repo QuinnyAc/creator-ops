@@ -1,0 +1,31 @@
+name: Ops scripts
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "Makefile"
+      - "docs/backups.md"
+      - ".github/workflows/ops-scripts.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - "Makefile"
+      - ".github/workflows/ops-scripts.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+      - name: Validate Make targets
+        run: |
+          make -n backup
+          make -n restore BACKUP=/tmp/creator-ops-test.dump
