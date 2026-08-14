@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -18,6 +19,19 @@ class PillarAnalyticsItem(BaseModel):
     engagement_rate: float
     favorite_rate: float
     follower_conversion_rate: float
+
+
+class PillarTrendItem(BaseModel):
+    pillar_id: UUID
+    pillar_name: str
+    recent_publications: int
+    previous_publications: int
+    recent_avg_views: float
+    previous_avg_views: float
+    view_change_percent: float | None
+    recent_favorite_rate: float
+    previous_favorite_rate: float
+    signal: Literal["rising", "stable", "falling", "new", "insufficient"]
 
 
 class PlatformAnalyticsItem(BaseModel):
