@@ -7,9 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.db import get_db
-from app.models import Content, ContentPillar, MetricSnapshot, Publication
+from app.models import (
+    Content,
+    ContentPillar,
+    MetricSnapshot,
+    Platform,
+    PlatformAccount,
+    Publication,
+)
 from app.schemas import AnalyticsSummary, MetricSnapshotCreate, MetricSnapshotRead
-from app.schemas_analytics import PerformanceMilestone, PillarAnalyticsItem
+from app.schemas_analytics import PerformanceMilestone, PillarAnalyticsItem, PlatformAnalyticsItem
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -54,6 +61,24 @@ def _get_owned_publication(
     if publication is None:
         raise HTTPException(status_code=404, detail="Publication not found.")
     return publication
+
+
+def _rates(
+    publications: int,
+    views: int,
+    likes: int,
+    comments: int,
+    favorites: int,
+    shares: int,
+    followers: int,
+) -> tuple[float, float, float, float]:
+    interactions = likes + comments + favorites + shares
+    return (
+        round(views / publications, 2) if publications else 0.0,
+        round(interactions / views * 100, 2) if views else 0.0,
+        round(favorites / views * 100, 2) if views else 0.0,
+        round(followers / views * 100, 2) if views else 0.0,
+    )
 
 
 @router.get("/publications/{publication_id}/metrics", response_model=list[MetricSnapshotRead])
@@ -214,7 +239,15 @@ def analytics_by_pillar(
         favorites = int(row.favorites)
         shares = int(row.shares)
         followers = int(row.followers)
-        interactions = likes + comments + favorites + shares
+        avg_views, engagement_rate, favorite_rate, follower_conversion_rate = _rates(
+            publications,
+            views,
+            likes,
+            comments,
+            favorites,
+            shares,
+            followers,
+        )
         result.append(
             PillarAnalyticsItem(
                 pillar_id=row.id,
@@ -226,10 +259,78 @@ def analytics_by_pillar(
                 favorites=favorites,
                 shares=shares,
                 followers_gained=followers,
-                avg_views=round(views / publications, 2) if publications else 0.0,
-                engagement_rate=round(interactions / views * 100, 2) if views else 0.0,
-                favorite_rate=round(favorites / views * 100, 2) if views else 0.0,
-                follower_conversion_rate=round(followers / views * 100, 2) if views else 0.0,
+                avg_views=avg_views,
+                engagement_rate=engagement_rate,
+                favorite_rate=favorite_rate,
+                follower_conversion_rate=follower_conversion_rate,
+            )
+        )
+    return result
+
+
+@router.get("/platforms", response_model=list[PlatformAnalyticsItem])
+def analytics_by_platform(
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[PlatformAnalyticsItem]:
+    latest = _latest_metric_snapshot_subquery()
+    rows = db.execute(
+        select(
+            Platform.id,
+            Platform.slug,
+            Platform.name,
+            func.count(latest.c.id).label("publications"),
+            func.coalesce(func.sum(latest.c.views), 0).label("views"),
+            func.coalesce(func.sum(latest.c.likes), 0).label("likes"),
+            func.coalesce(func.sum(latest.c.comments), 0).label("comments"),
+            func.coalesce(func.sum(latest.c.favorites), 0).label("favorites"),
+            func.coalesce(func.sum(latest.c.shares), 0).label("shares"),
+            func.coalesce(func.sum(latest.c.followers_gained), 0).label("followers"),
+        )
+        .select_from(Platform)
+        .join(PlatformAccount, PlatformAccount.platform_id == Platform.id)
+        .join(Publication, Publication.platform_account_id == PlatformAccount.id)
+        .join(Content, Content.id == Publication.content_id)
+        .join(latest, latest.c.publication_id == Publication.id)
+        .where(Content.user_id == user_id, PlatformAccount.user_id == user_id)
+        .group_by(Platform.id, Platform.slug, Platform.name)
+        .order_by(func.sum(latest.c.views).desc())
+    ).all()
+
+    result: list[PlatformAnalyticsItem] = []
+    for row in rows:
+        publications = int(row.publications)
+        views = int(row.views)
+        likes = int(row.likes)
+        comments = int(row.comments)
+        favorites = int(row.favorites)
+        shares = int(row.shares)
+        followers = int(row.followers)
+        avg_views, engagement_rate, favorite_rate, follower_conversion_rate = _rates(
+            publications,
+            views,
+            likes,
+            comments,
+            favorites,
+            shares,
+            followers,
+        )
+        result.append(
+            PlatformAnalyticsItem(
+                platform_id=row.id,
+                platform_slug=row.slug,
+                platform_name=row.name,
+                publications=publications,
+                views=views,
+                likes=likes,
+                comments=comments,
+                favorites=favorites,
+                shares=shares,
+                followers_gained=followers,
+                avg_views=avg_views,
+                engagement_rate=engagement_rate,
+                favorite_rate=favorite_rate,
+                follower_conversion_rate=follower_conversion_rate,
             )
         )
     return result
