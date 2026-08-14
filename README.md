@@ -4,24 +4,43 @@
 
 Creator Ops helps individual creators and small content teams manage the full content production loop in one place:
 
-**Inspiration → Topic → Content → Publication → Metrics → Review → Better next topic**
+**Inspiration → Topic → Content → Publication → Metrics → Review → Insight → Better next topic**
 
-It is intentionally not another generic Notion-style database. The product understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, and the learning produced by a review.
+It is intentionally not another generic Notion-style database. Creator Ops understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, the review produced from those results, and the reusable creator knowledge that should influence the next decision.
+
+## Why Creator Ops
+
+Generic databases are excellent at storing rows. Creator Ops is opinionated about the creator workflow:
+
+- capture an idea with almost no friction;
+- decide whether the topic is worth making before production starts;
+- manage the content lifecycle instead of a generic task lifecycle;
+- separate reusable `Content` from each platform-specific `Publication`;
+- preserve metric snapshots instead of overwriting yesterday's numbers;
+- compare Content Pillars, platforms, title patterns, and recent interest changes;
+- turn a one-off review into a reusable Creator Playbook insight.
 
 ## Current MVP
 
-The repository now includes a working first-pass product architecture for:
+The repository includes a working end-to-end product foundation for:
 
-- low-friction inspiration inbox;
-- structured topic database and weighted topic scoring;
-- tags attached to topics and content assets;
+- low-friction Inspiration Inbox with conversion into Topics;
+- searchable Topic Library with weighted opportunity / priority scoring;
+- Content Pillars and tags for stable strategy + flexible taxonomy;
 - content production Kanban and per-content workspace;
-- multi-platform account and publication management;
+- multi-platform creator accounts and publication management;
 - monthly publishing calendar;
 - manual metric snapshots and 24h / 72h / 7d / 30d milestones;
-- Content Pillar performance analytics;
+- bulk CSV metric import with idempotent snapshot upserts;
+- CSV exports for topics, content, publications, reviews, and Playbook insights;
+- Content Pillar performance comparisons;
+- recent-vs-previous Content Pillar interest trend signals;
+- platform performance comparisons;
+- title-pattern analysis for packaging learnings;
 - structured content reviews;
-- dashboard summaries;
+- transparent data-assisted review suggestions against the creator's own baseline;
+- Creator Playbook / reusable Insights promoted from review learnings;
+- dashboard summaries and high-priority topic visibility;
 - email/password registration and JWT authentication;
 - Docker-based local development;
 - PostgreSQL migrations and GitHub Actions CI.
@@ -46,12 +65,27 @@ Publication(s)
     ↓
 Metric Snapshots
     ↓
-Review
+Analytics + Review
     ↓
-Learning → Next Topic
+Creator Playbook Insight
+    ↓
+Better next Topic
 ```
 
-A single `Content` can have multiple `Publication` records. That is important because the same core idea may be adapted to several platforms with different titles, schedules, links, and performance data.
+A single `Content` can have multiple `Publication` records. The same core idea can therefore be adapted to several platforms with different titles, schedules, links, and performance data without losing the relationship to the original content asset.
+
+## Analytics philosophy
+
+Creator Ops avoids dashboards that only report vanity totals. The analytics layer is designed to answer operational questions:
+
+- Which Content Pillars perform best?
+- Is audience interest in a Content Pillar rising or falling?
+- Which platform is more efficient for this creator?
+- Which title patterns correlate with stronger outcomes?
+- Did this content beat the creator's own baseline?
+- What should change in the next iteration?
+
+The first review assistant is deliberately rule-based and transparent. It does not require a proprietary LLM to create useful feedback, and it never overwrites the creator's review without an explicit action.
 
 ## Tech stack
 
@@ -100,7 +134,7 @@ Then open:
 
 The API container applies `alembic upgrade head` before starting.
 
-Local development defaults to the seeded creator identity, so you can use the workflow immediately. You can also create a real account on `/login` and the web client will attach the returned Bearer token automatically.
+Local development defaults to the seeded creator identity, so the workflow can be explored immediately. You can also create a real account on `/login`; the web client attaches the returned Bearer token automatically.
 
 To reset all local PostgreSQL data:
 
@@ -146,7 +180,11 @@ npm run typecheck
 npm run build
 ```
 
-GitHub Actions verifies Python compilation, migration upgrade/downgrade, backend tests including the complete creator workflow, frontend type checking, and the production web build.
+GitHub Actions verifies Python compilation, migration upgrade/downgrade, backend tests including the complete creator workflow and feature-specific integrations, frontend type checking, and the production web build.
+
+## Data ownership
+
+Creator Ops is designed as an open-source system of record, not a data trap. The Settings page can export the creator's core operational data as UTF-8 CSV. Metric snapshots can also be bulk-imported from CSV, allowing a spreadsheet or platform export to act as a bridge before direct platform integrations are available.
 
 ## Production authentication
 
@@ -191,19 +229,23 @@ See [`docs/deployment.md`](docs/deployment.md) for the production checklist.
 ### P1 — creator analytics
 
 - [x] Content Pillar performance comparisons
+- [x] Content Pillar interest trend signals
+- [x] Platform performance comparisons
 - [x] 24h / 72h / 7d / 30d performance views
 - [x] Publishing calendar view
 - [x] Topic / content tag relationships
-- [ ] Title pattern analysis
-- [ ] CSV import / export
-- [ ] More API integration coverage
+- [x] Title pattern analysis
+- [x] CSV metric import and operational data export
+- [x] Data-assisted review suggestions
+- [x] Expanded API integration coverage
 
 ### P2 — creator intelligence
 
-- [ ] Platform data integrations
-- [ ] AI-assisted review
-- [ ] AI topic scoring suggestions
-- [ ] Creator Playbook / reusable insights
+- [x] Creator Playbook / reusable insights foundation
+- [ ] Official platform data integrations
+- [ ] Optional LLM-assisted review using Creator Playbook context
+- [ ] Evidence-backed AI topic scoring suggestions
+- [ ] Automated insight confidence / validation over time
 - [ ] Team collaboration and roles
 - [ ] Browser extension and automation hooks
 
