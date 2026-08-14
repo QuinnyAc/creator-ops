@@ -1,4 +1,6 @@
-.PHONY: dev down reset test test-api typecheck build-web
+.PHONY: dev down reset test test-api typecheck build-web prod-config prod-build prod-up prod-down
+
+PROD_ENV ?= .env.production
 
 dev:
 	docker compose up --build
@@ -19,3 +21,15 @@ typecheck:
 
 build-web:
 	cd apps/web && npm run build
+
+prod-config:
+	docker compose --env-file $(PROD_ENV) -f docker-compose.prod.yml config
+
+prod-build:
+	docker compose --env-file $(PROD_ENV) -f docker-compose.prod.yml build
+
+prod-up:
+	docker compose --env-file $(PROD_ENV) -f docker-compose.prod.yml up -d --build
+
+prod-down:
+	docker compose --env-file $(PROD_ENV) -f docker-compose.prod.yml down
