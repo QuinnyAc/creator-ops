@@ -4,8 +4,8 @@ from uuid import UUID
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-DEFAULT_DEV_JWT_SECRET = "creator-ops-development-secret-change-before-production"
+DEVELOPMENT_JWT_SECRET = "development-only-change-me-creator-ops-secret"
+MIN_PRODUCTION_JWT_SECRET_BYTES = 32
 
 
 class Settings(BaseSettings):
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     default_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     allow_dev_user_fallback: bool = True
-    jwt_secret_key: str = DEFAULT_DEV_JWT_SECRET
+    jwt_secret_key: str = DEVELOPMENT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
 
@@ -37,8 +37,15 @@ class Settings(BaseSettings):
         if self.app_env == "production":
             if self.allow_dev_user_fallback:
                 raise ValueError("ALLOW_DEV_USER_FALLBACK must be false in production.")
-            if self.jwt_secret_key == DEFAULT_DEV_JWT_SECRET:
+            if self.jwt_secret_key == DEVELOPMENT_JWT_SECRET:
                 raise ValueError("JWT_SECRET_KEY must be changed in production.")
+            if len(self.jwt_secret_key.encode("utf-8")) < MIN_PRODUCTION_JWT_SECRET_BYTES:
+                raise ValueError(
+                    f"JWT_SECRET_KEY must contain at least {MIN_PRODUCTION_JWT_SECRET_BYTES} bytes "
+                    "in production."
+                )
+            if "*" in self.cors_origin_list:
+                raise ValueError("CORS_ORIGINS must list explicit origins in production; '*' is unsafe.")
         return self
 
 
