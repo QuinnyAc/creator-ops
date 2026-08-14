@@ -5,6 +5,7 @@ on:
     branches:
       - chore/frontend-lockfile-v2
 
+# One-time workflow: it removes itself after committing the generated lockfile.
 permissions:
   contents: write
 
