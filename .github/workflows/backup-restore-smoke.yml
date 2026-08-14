@@ -1,0 +1,64 @@
+name: Backup restore smoke
+
+on:
+  pull_request:
+    paths:
+      - "scripts/backup-postgres.sh"
+      - "scripts/restore-postgres.sh"
+      - "docker-compose.yml"
+      - ".github/workflows/backup-restore-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start temporary Creator Ops stack
+        run: |
+          cp .env.example .env
+          docker compose up --build -d
+      - name: Wait for API readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              docker compose logs api db
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Create restore marker
+        run: >-
+          docker compose exec -T db sh -ceu
+          'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+          -v ON_ERROR_STOP=1
+          -c "CREATE TABLE backup_restore_smoke (id integer PRIMARY KEY, value text NOT NULL);"
+          -c "INSERT INTO backup_restore_smoke VALUES (1, ''creator-ops-backup-ok'');"'
+      - name: Backup database
+        run: ./scripts/backup-postgres.sh /tmp/creator-ops-smoke.dump
+      - name: Destroy marker after backup
+        run: >-
+          docker compose exec -T db sh -ceu
+          'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+          -v ON_ERROR_STOP=1
+          -c "DROP TABLE backup_restore_smoke;"'
+      - name: Restore database
+        env:
+          CREATOR_OPS_RESTORE_CONFIRM: "YES"
+        run: ./scripts/restore-postgres.sh /tmp/creator-ops-smoke.dump
+      - name: Verify restored marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          value="$(docker compose exec -T db sh -ceu 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atc "SELECT value FROM backup_restore_smoke WHERE id = 1;"')"
+          test "$value" = "creator-ops-backup-ok"
+      - name: Stop temporary stack
+        if: always()
+        run: docker compose down -v
