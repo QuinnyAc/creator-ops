@@ -16,6 +16,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class UserProfileUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+
+
 class AuthUser(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
