@@ -1,0 +1,48 @@
+name: Refresh frontend lockfile
+
+on:
+  push:
+    branches:
+      - chore/frontend-lockfile-v2
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-frontend-lockfile
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Regenerate lockfile
+        working-directory: apps/web
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify reproducible install
+        working-directory: apps/web
+        run: npm ci --ignore-scripts
+      - name: Verify no high severity audit findings
+        working-directory: apps/web
+        run: npm audit --audit-level=high
+      - name: Commit refreshed lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json is already current"
+            exit 0
+          fi
+          git commit -m "build(web): refresh lockfile for Next.js 16.3.1"
+          git push
