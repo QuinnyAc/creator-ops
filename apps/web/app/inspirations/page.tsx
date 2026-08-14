@@ -70,6 +70,17 @@ export default function InspirationsPage() {
     }
   }
 
+  async function deleteInspiration(item: Inspiration) {
+    if (!window.confirm(`确定删除灵感“${item.title}”吗？删除后无法恢复。`)) return;
+    setError("");
+    try {
+      await api<void>(`/inspirations/${item.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "灵感删除失败");
+    }
+  }
+
   const inbox = items.filter((item) => item.status === "inbox");
   const processed = items.filter((item) => item.status !== "inbox");
 
@@ -122,9 +133,10 @@ export default function InspirationsPage() {
                     <div className="dataRowTitle">{item.title}</div>
                     <div className="dataRowMeta">{item.note || "无补充"} · {formatDate(item.created_at)}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="button small" onClick={() => void convert(item)}>转为选题</button>
-                    <button className="button small secondary" onClick={() => void archive(item)}>归档</button>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <button className="button small" type="button" onClick={() => void convert(item)}>转为选题</button>
+                    <button className="button small secondary" type="button" onClick={() => void archive(item)}>归档</button>
+                    <button className="button small danger" type="button" onClick={() => void deleteInspiration(item)}>删除灵感</button>
                   </div>
                 </div>
               ))}
@@ -143,7 +155,10 @@ export default function InspirationsPage() {
                     <div className="dataRowTitle">{item.title}</div>
                     <div className="dataRowMeta">{formatDate(item.updated_at)}</div>
                   </div>
-                  <Badge value={item.status} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Badge value={item.status} />
+                    <button className="button small danger" type="button" onClick={() => void deleteInspiration(item)}>删除灵感</button>
+                  </div>
                 </div>
               ))}
             </div>
