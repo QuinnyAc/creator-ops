@@ -189,6 +189,12 @@ def test_complete_creator_operations_loop() -> None:
         assert get_review_response.status_code == 200, get_review_response.text
         assert "长期观察收藏" in get_review_response.json()["learnings"]
 
+        for export_path in ("topics", "contents", "publications", "reviews"):
+            export_response = client.get(f"/api/v1/exports/{export_path}.csv")
+            assert export_response.status_code == 200, export_response.text
+            assert export_response.headers["content-type"].startswith("text/csv")
+            assert suffix in export_response.text
+
         dashboard_response = client.get("/api/v1/dashboard/summary")
         assert dashboard_response.status_code == 200, dashboard_response.text
         dashboard = dashboard_response.json()
