@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { AnalyticsSummary, ContentItem, DashboardSummary, Topic } from "@/lib/types";
+import type { AnalyticsSummary, ContentItem, DashboardSummary, TopicRecommendation } from "@/lib/types";
 import {
   Badge,
   EmptyState,
@@ -38,7 +38,7 @@ const EMPTY_ANALYTICS: AnalyticsSummary = {
 export default function DashboardPage() {
   const [summary, setSummary] = useState(EMPTY_DASHBOARD);
   const [analytics, setAnalytics] = useState(EMPTY_ANALYTICS);
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [recommendations, setRecommendations] = useState<TopicRecommendation[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,15 +47,15 @@ export default function DashboardPage() {
     setLoading(true);
     setError("");
     try {
-      const [nextSummary, nextAnalytics, nextTopics, nextContents] = await Promise.all([
+      const [nextSummary, nextAnalytics, nextRecommendations, nextContents] = await Promise.all([
         api<DashboardSummary>("/dashboard/summary"),
         api<AnalyticsSummary>("/analytics/summary"),
-        api<Topic[]>("/topics"),
+        api<TopicRecommendation[]>("/recommendations/topics?limit=5"),
         api<ContentItem[]>("/contents"),
       ]);
       setSummary(nextSummary);
       setAnalytics(nextAnalytics);
-      setTopics(nextTopics);
+      setRecommendations(nextRecommendations);
       setContents(nextContents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dashboard 加载失败");
@@ -67,15 +67,6 @@ export default function DashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const topTopics = useMemo(
-    () =>
-      [...topics]
-        .filter((topic) => topic.priority_score != null)
-        .sort((a, b) => Number(b.priority_score) - Number(a.priority_score))
-        .slice(0, 5),
-    [topics],
-  );
 
   const pipeline = useMemo(() => {
     const counts = new Map<string, number>();
@@ -109,21 +100,27 @@ export default function DashboardPage() {
           <div className="dashboardGrid">
             <div className="stack">
               <Section
-                title="高优先级选题"
-                description="根据机会价值与制作成本计算下一步应该做什么。"
+                title="下一条建议做什么？"
+                description="人工选题优先级叠加 Content Pillar 历史表现和最近兴趣趋势；所有加减分都有可解释证据。"
                 action={<Link className="link" href="/topics">查看选题库 →</Link>}
               >
-                {topTopics.length === 0 ? (
-                  <EmptyState>还没有完成选题评分。先创建一个选题并给六个维度打分。</EmptyState>
+                {recommendations.length === 0 ? (
+                  <EmptyState>还没有可推荐的已评分选题。先为 Evaluating / Approved / Scheduled 选题完成评分。</EmptyState>
                 ) : (
                   <div className="dataList">
-                    {topTopics.map((topic) => (
-                      <div className="dataRow" key={topic.id}>
-                        <div>
-                          <div className="dataRowTitle">{topic.title}</div>
-                          <div className="dataRowMeta">{topic.goal ?? "未设置目标"} · {topic.status}</div>
+                    {recommendations.map((item) => (
+                      <div className="dataRow" key={item.topic_id} style={{ alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div className="dataRowTitle">{item.title}</div>
+                          <div className="dataRowMeta">
+                            {item.pillar_name ?? "未设置 Pillar"} · {item.status} · 人工优先级 {item.base_priority_score.toFixed(0)}
+                            {item.evidence_adjustment === 0 ? "" : ` · 证据调整 ${item.evidence_adjustment > 0 ? "+" : ""}${item.evidence_adjustment.toFixed(0)}`}
+                          </div>
+                          <div className="dataRowMeta" style={{ marginTop: 5 }}>
+                            {item.reasons[0] ?? "暂无额外证据"}
+                          </div>
                         </div>
-                        <div className="score high">{Number(topic.priority_score).toFixed(0)}</div>
+                        <div className="score high" title="Evidence-backed recommended score">{item.recommended_score.toFixed(0)}</div>
                       </div>
                     ))}
                   </div>
