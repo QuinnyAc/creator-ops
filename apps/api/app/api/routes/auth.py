@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user_id
 from app.db import get_db
 from app.models import User
-from app.schemas_auth import AuthResponse, AuthUser, LoginRequest, RegisterRequest
+from app.schemas_auth import (
+    AuthResponse,
+    AuthUser,
+    LoginRequest,
+    RegisterRequest,
+    UserProfileUpdate,
+)
 from app.services.auth import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,7 +37,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
     user = User(
         email=email,
         display_name=payload.display_name.strip(),
-        timezone=payload.timezone,
+        timezone=payload.timezone.strip(),
         password_hash=hash_password(payload.password),
     )
     db.add(user)
@@ -75,4 +81,25 @@ def me(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
+    return user
+
+
+@router.patch("/me", response_model=AuthUser)
+def update_me(
+    payload: UserProfileUpdate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    changes = payload.model_dump(exclude_unset=True)
+    if "display_name" in changes:
+        user.display_name = changes["display_name"].strip()
+    if "timezone" in changes:
+        user.timezone = changes["timezone"].strip()
+
+    db.commit()
+    db.refresh(user)
     return user
