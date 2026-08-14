@@ -13,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+function requestHeaders(init?: RequestInit) {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", "application/json");
@@ -23,11 +23,14 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  return headers;
+}
 
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
     cache: "no-store",
-    headers,
+    headers: requestHeaders(init),
   });
 
   if (response.status === 204) {
@@ -44,6 +47,35 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return body as T;
+}
+
+export async function downloadApiFile(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${API_ROOT}${path}`, {
+    cache: "no-store",
+    headers: requestHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const detail = body?.detail;
+    throw new ApiError(
+      response.status,
+      typeof detail === "string" ? detail : `Download failed with status ${response.status}`,
+    );
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function postJson<T>(path: string, body: unknown): Promise<T> {
