@@ -5,8 +5,8 @@ import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Creator Ops",
-  description: "Open-source creator operations workspace",
+  title: "Quinny的自媒体运营平台",
+  description: "Quinny的自媒体运营平台",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
