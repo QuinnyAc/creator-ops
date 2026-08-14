@@ -11,6 +11,7 @@ client = TestClient(app)
 def test_complete_creator_operations_loop() -> None:
     suffix = uuid4().hex[:8]
     pillar_id: str | None = None
+    tag_id: str | None = None
     inspiration_id: str | None = None
     topic_id: str | None = None
     content_id: str | None = None
@@ -27,6 +28,13 @@ def test_complete_creator_operations_loop() -> None:
         )
         assert pillar_response.status_code == 201, pillar_response.text
         pillar_id = pillar_response.json()["id"]
+
+        tag_response = client.post(
+            "/api/v1/tags",
+            json={"name": f"integration-topic-{suffix}"},
+        )
+        assert tag_response.status_code == 201, tag_response.text
+        tag_id = tag_response.json()["id"]
 
         inspiration_response = client.post(
             "/api/v1/inspirations",
@@ -90,6 +98,13 @@ def test_complete_creator_operations_loop() -> None:
         )
         assert content_response.status_code == 201, content_response.text
         content_id = content_response.json()["id"]
+
+        tag_assignment_response = client.put(
+            f"/api/v1/contents/{content_id}/tags",
+            json={"tag_ids": [tag_id]},
+        )
+        assert tag_assignment_response.status_code == 200, tag_assignment_response.text
+        assert [item["id"] for item in tag_assignment_response.json()] == [tag_id]
 
         workspace_response = client.patch(
             f"/api/v1/contents/{content_id}",
@@ -172,6 +187,27 @@ def test_complete_creator_operations_loop() -> None:
         assert bilibili_analytics["favorites"] >= 144
         assert bilibili_analytics["publications"] >= 1
 
+        tag_analytics_response = client.get("/api/v1/analytics/tags")
+        assert tag_analytics_response.status_code == 200, tag_analytics_response.text
+        tag_analytics = next(
+            item for item in tag_analytics_response.json() if item["tag_id"] == tag_id
+        )
+        assert tag_analytics["contents"] == 1
+        assert tag_analytics["publications"] == 1
+        assert tag_analytics["views"] == 1200
+        assert tag_analytics["favorites"] == 144
+        assert tag_analytics["favorite_rate"] == 12.0
+
+        pillar_trends_response = client.get("/api/v1/analytics/pillar-trends?window_days=30")
+        assert pillar_trends_response.status_code == 200, pillar_trends_response.text
+        pillar_trend = next(
+            item for item in pillar_trends_response.json() if item["pillar_id"] == pillar_id
+        )
+        assert pillar_trend["recent_publications"] == 1
+        assert pillar_trend["recent_avg_views"] == 1200.0
+        assert pillar_trend["recent_favorite_rate"] == 12.0
+        assert pillar_trend["signal"] in {"new", "insufficient"}
+
         review_response = client.put(
             f"/api/v1/reviews/content/{content_id}",
             json={
@@ -215,6 +251,9 @@ def test_complete_creator_operations_loop() -> None:
             assert response.status_code in {204, 404}, response.text
         if account_id is not None:
             response = client.delete(f"/api/v1/platform-accounts/{account_id}")
+            assert response.status_code in {204, 404}, response.text
+        if tag_id is not None:
+            response = client.delete(f"/api/v1/tags/{tag_id}")
             assert response.status_code in {204, 404}, response.text
         if pillar_id is not None:
             response = client.delete(f"/api/v1/content-pillars/{pillar_id}")
