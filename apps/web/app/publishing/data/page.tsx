@@ -48,6 +48,29 @@ export default function SingleVideoDataPage() {
   const accountMap = useMemo(() => new Map(accounts.map((item) => [item.id, item])), [accounts]);
   const contentMap = useMemo(() => new Map(contents.map((item) => [item.id, item])), [contents]);
 
+  async function deleteVideo(item: Publication) {
+    const title = item.title || contentMap.get(item.content_id)?.title || "这条视频";
+    if (!window.confirm(`确定删除“${title}”吗？该视频的历史数据快照也会一起删除，且无法恢复。`)) return;
+    setError("");
+    try {
+      await api<void>(`/publications/${item.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "视频删除失败");
+    }
+  }
+
+  async function deleteAccount(account: PlatformAccount) {
+    if (!window.confirm(`确定删除账号“${account.name}”吗？`)) return;
+    setError("");
+    try {
+      await api<void>(`/platform-accounts/${account.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "账号删除失败");
+    }
+  }
+
   if (loading) return <LoadingBlock />;
 
   return (
@@ -55,12 +78,36 @@ export default function SingleVideoDataPage() {
       <PageHeader
         eyebrow="VIDEO DATA"
         title="单视频数据"
-        description="集中查看每一条已发布作品的最新表现，点击作品进入完整数据详情。"
+        description="集中查看每一条已发布作品的最新表现，也可以删除单条视频记录或平台账号。"
         action={<Link className="button small secondary" href="/publishing">返回发布管理</Link>}
       />
       {error ? <ErrorBanner message={error} /> : null}
 
-      <Section title={`已发布作品 · ${publications.length}`} description="最新数据每 20 秒刷新。">
+      <Section title={`平台账号 · ${accounts.length}`} description="删除账号不会误删视频。账号仍有关联视频时，系统会要求先删除这些视频记录。">
+        {accounts.length === 0 ? (
+          <EmptyState>还没有平台账号。</EmptyState>
+        ) : (
+          <div className="dataList">
+            {accounts.map((account) => {
+              const platform = platformMap.get(account.platform_id);
+              const videoCount = publications.filter((item) => item.platform_account_id === account.id).length;
+              return (
+                <div className="dataRow" key={account.id}>
+                  <div>
+                    <div className="dataRowTitle">{account.name}</div>
+                    <div className="dataRowMeta">{platform?.name ?? "平台"}{account.handle ? ` · ${account.handle}` : ""} · 当前显示 {videoCount} 条视频</div>
+                  </div>
+                  <button className="button small danger" type="button" onClick={() => void deleteAccount(account)}>删除账号</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
+
+      <Section title={`已发布作品 · ${publications.length}`} description="最新数据每 20 秒刷新。删除单条视频时，对应历史数据快照会一起删除。">
         {publications.length === 0 ? (
           <EmptyState>还没有已发布作品。先在“发布管理”创建发布记录并填写作品链接。</EmptyState>
         ) : (
@@ -79,7 +126,10 @@ export default function SingleVideoDataPage() {
                         {platform?.name ?? "平台"} · {account?.name ?? "账号"} · {formatDate(item.published_at || item.scheduled_at)}
                       </div>
                     </div>
-                    <Link className="button small" href={`/publishing/${item.id}`}>查看数据详情 →</Link>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Link className="button small" href={`/publishing/${item.id}`}>查看数据详情 →</Link>
+                      <button className="button small danger" type="button" onClick={() => void deleteVideo(item)}>删除视频</button>
+                    </div>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, marginTop: 14 }}>
