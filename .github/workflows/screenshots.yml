@@ -1,0 +1,104 @@
+name: Product screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chore/demo-screenshots
+
+permissions:
+  contents: write
+
+concurrency:
+  group: product-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: Capture demo workspace
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Creator Ops demo stack
+        run: |
+          cp .env.example .env
+          docker compose up --build -d
+
+      - name: Wait for API and Web
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              docker compose logs api
+              exit 1
+            fi
+            sleep 2
+          done
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000 >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == "90" ]]; then
+              docker compose logs web
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Seed realistic Creator Loop demo data
+        run: docker compose exec -T api python -m app.demo_seed
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install screenshot tooling
+        working-directory: tools/screenshots
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Capture product screenshots
+        working-directory: tools/screenshots
+        env:
+          CREATOR_OPS_WEB_URL: http://127.0.0.1:3000
+        run: node capture.mjs
+
+      - name: Validate screenshot output
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in dashboard topics content-pipeline publishing-calendar analytics creator-playbook; do
+            test -s "docs/screenshots/${image}.png"
+          done
+
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: creator-ops-product-screenshots
+          path: docs/screenshots/*.png
+          if-no-files-found: error
+
+      - name: Commit screenshots to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/*.png
+          if git diff --cached --quiet; then
+            echo "Screenshots are unchanged."
+            exit 0
+          fi
+          git commit -m "docs: refresh product screenshots"
+          git push
+
+      - name: Stop demo stack
+        if: always()
+        run: docker compose down -v
