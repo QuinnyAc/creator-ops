@@ -161,6 +161,17 @@ def test_complete_creator_operations_loop() -> None:
         assert analytics["favorites"] >= 144
         assert analytics["followers_gained"] >= 22
 
+        platform_analytics_response = client.get("/api/v1/analytics/platforms")
+        assert platform_analytics_response.status_code == 200, platform_analytics_response.text
+        bilibili_analytics = next(
+            item
+            for item in platform_analytics_response.json()
+            if item["platform_slug"] == "bilibili"
+        )
+        assert bilibili_analytics["views"] >= 1200
+        assert bilibili_analytics["favorites"] >= 144
+        assert bilibili_analytics["publications"] >= 1
+
         review_response = client.put(
             f"/api/v1/reviews/content/{content_id}",
             json={
