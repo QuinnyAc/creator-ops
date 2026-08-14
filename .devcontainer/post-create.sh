@@ -6,9 +6,9 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
-# When running in GitHub Codespaces, configure Creator Ops to use the stable
-# forwarded Web/API URLs for this one codespace. Authentication is required so
-# the public forwarded ports do not expose an anonymous editable workspace.
+# When running in GitHub Codespaces, expose only the web origin to the browser.
+# Next.js proxies /api/v1 internally to the FastAPI container, so operators do
+# not need to access the forwarded API port directly.
 if [[ "${CODESPACES:-false}" == "true" ]]; then
   python3 - <<'PY'
 from pathlib import Path
@@ -28,11 +28,11 @@ for line in lines:
 name = os.environ['CODESPACE_NAME']
 domain = os.environ['GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN']
 web_url = f"https://{name}-3000.{domain}"
-api_url = f"https://{name}-8000.{domain}"
 
 updates = {
     'CORS_ORIGINS': web_url,
-    'NEXT_PUBLIC_API_URL': api_url,
+    'NEXT_PUBLIC_API_URL': web_url,
+    'API_INTERNAL_URL': 'http://api:8000',
     'ALLOW_DEV_USER_FALLBACK': 'false',
     'NEXT_PUBLIC_REQUIRE_AUTH': 'true',
 }
@@ -64,7 +64,7 @@ for key in order:
 
 path.write_text('\n'.join(output) + '\n')
 print(f"Configured Codespaces Web URL: {web_url}")
-print(f"Configured Codespaces API URL: {api_url}")
+print("Browser API access will use the same Web URL and be proxied internally.")
 PY
 fi
 
