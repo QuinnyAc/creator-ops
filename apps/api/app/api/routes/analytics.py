@@ -1,7 +1,7 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,9 +14,17 @@ from app.models import (
     Platform,
     PlatformAccount,
     Publication,
+    Tag,
+    content_tags,
 )
 from app.schemas import AnalyticsSummary, MetricSnapshotCreate, MetricSnapshotRead
-from app.schemas_analytics import PerformanceMilestone, PillarAnalyticsItem, PlatformAnalyticsItem
+from app.schemas_analytics import (
+    PerformanceMilestone,
+    PillarAnalyticsItem,
+    PillarTrendItem,
+    PlatformAnalyticsItem,
+    TagAnalyticsItem,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -268,6 +276,118 @@ def analytics_by_pillar(
     return result
 
 
+def _pillar_period_rows(
+    db: Session,
+    user_id: UUID,
+    start_at: datetime,
+    end_at: datetime,
+) -> dict[UUID, dict[str, int | str]]:
+    latest = _latest_metric_snapshot_subquery()
+    rows = db.execute(
+        select(
+            ContentPillar.id,
+            ContentPillar.name,
+            func.count(latest.c.id).label("publications"),
+            func.coalesce(func.sum(latest.c.views), 0).label("views"),
+            func.coalesce(func.sum(latest.c.favorites), 0).label("favorites"),
+        )
+        .select_from(ContentPillar)
+        .join(Content, Content.pillar_id == ContentPillar.id)
+        .join(Publication, Publication.content_id == Content.id)
+        .join(latest, latest.c.publication_id == Publication.id)
+        .where(
+            ContentPillar.user_id == user_id,
+            Publication.published_at.is_not(None),
+            Publication.published_at >= start_at,
+            Publication.published_at < end_at,
+        )
+        .group_by(ContentPillar.id, ContentPillar.name)
+    ).all()
+    return {
+        row.id: {
+            "name": row.name,
+            "publications": int(row.publications),
+            "views": int(row.views),
+            "favorites": int(row.favorites),
+        }
+        for row in rows
+    }
+
+
+@router.get("/pillar-trends", response_model=list[PillarTrendItem])
+def analytics_pillar_trends(
+    window_days: int = Query(default=30, ge=7, le=180),
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[PillarTrendItem]:
+    now = datetime.now(timezone.utc)
+    recent_start = now - timedelta(days=window_days)
+    previous_start = recent_start - timedelta(days=window_days)
+    recent = _pillar_period_rows(db, user_id, recent_start, now)
+    previous = _pillar_period_rows(db, user_id, previous_start, recent_start)
+
+    result: list[PillarTrendItem] = []
+    for pillar_id in set(recent) | set(previous):
+        recent_row = recent.get(pillar_id, {})
+        previous_row = previous.get(pillar_id, {})
+        name = str(recent_row.get("name") or previous_row.get("name") or "Unnamed")
+        recent_publications = int(recent_row.get("publications", 0))
+        previous_publications = int(previous_row.get("publications", 0))
+        recent_views = int(recent_row.get("views", 0))
+        previous_views = int(previous_row.get("views", 0))
+        recent_favorites = int(recent_row.get("favorites", 0))
+        previous_favorites = int(previous_row.get("favorites", 0))
+        recent_avg_views = round(recent_views / recent_publications, 2) if recent_publications else 0.0
+        previous_avg_views = (
+            round(previous_views / previous_publications, 2) if previous_publications else 0.0
+        )
+        recent_favorite_rate = (
+            round(recent_favorites / recent_views * 100, 2) if recent_views else 0.0
+        )
+        previous_favorite_rate = (
+            round(previous_favorites / previous_views * 100, 2) if previous_views else 0.0
+        )
+
+        view_change_percent: float | None = None
+        if previous_avg_views > 0:
+            view_change_percent = round(
+                (recent_avg_views - previous_avg_views) / previous_avg_views * 100,
+                2,
+            )
+
+        if previous_publications == 0 and recent_publications > 0:
+            signal = "new"
+        elif recent_publications == 0:
+            signal = "falling" if previous_publications > 0 else "insufficient"
+        elif previous_publications == 0 or view_change_percent is None:
+            signal = "insufficient"
+        elif view_change_percent >= 20:
+            signal = "rising"
+        elif view_change_percent <= -20:
+            signal = "falling"
+        else:
+            signal = "stable"
+
+        result.append(
+            PillarTrendItem(
+                pillar_id=pillar_id,
+                pillar_name=name,
+                recent_publications=recent_publications,
+                previous_publications=previous_publications,
+                recent_avg_views=recent_avg_views,
+                previous_avg_views=previous_avg_views,
+                view_change_percent=view_change_percent,
+                recent_favorite_rate=recent_favorite_rate,
+                previous_favorite_rate=previous_favorite_rate,
+                signal=signal,
+            )
+        )
+
+    signal_order = {"rising": 0, "new": 1, "stable": 2, "insufficient": 3, "falling": 4}
+    result.sort(key=lambda item: (signal_order[item.signal], -item.recent_avg_views, item.pillar_name))
+    return result
+
+
 @router.get("/platforms", response_model=list[PlatformAnalyticsItem])
 def analytics_by_platform(
     db: Session = Depends(get_db),
@@ -320,6 +440,74 @@ def analytics_by_platform(
                 platform_id=row.id,
                 platform_slug=row.slug,
                 platform_name=row.name,
+                publications=publications,
+                views=views,
+                likes=likes,
+                comments=comments,
+                favorites=favorites,
+                shares=shares,
+                followers_gained=followers,
+                avg_views=avg_views,
+                engagement_rate=engagement_rate,
+                favorite_rate=favorite_rate,
+                follower_conversion_rate=follower_conversion_rate,
+            )
+        )
+    return result
+
+
+@router.get("/tags", response_model=list[TagAnalyticsItem])
+def analytics_by_tag(
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[TagAnalyticsItem]:
+    latest = _latest_metric_snapshot_subquery()
+    rows = db.execute(
+        select(
+            Tag.id,
+            Tag.name,
+            func.count(func.distinct(Content.id)).label("contents"),
+            func.count(latest.c.id).label("publications"),
+            func.coalesce(func.sum(latest.c.views), 0).label("views"),
+            func.coalesce(func.sum(latest.c.likes), 0).label("likes"),
+            func.coalesce(func.sum(latest.c.comments), 0).label("comments"),
+            func.coalesce(func.sum(latest.c.favorites), 0).label("favorites"),
+            func.coalesce(func.sum(latest.c.shares), 0).label("shares"),
+            func.coalesce(func.sum(latest.c.followers_gained), 0).label("followers"),
+        )
+        .select_from(Tag)
+        .join(content_tags, content_tags.c.tag_id == Tag.id)
+        .join(Content, Content.id == content_tags.c.content_id)
+        .join(Publication, Publication.content_id == Content.id)
+        .join(latest, latest.c.publication_id == Publication.id)
+        .where(Tag.user_id == user_id, Content.user_id == user_id)
+        .group_by(Tag.id, Tag.name)
+        .order_by(func.sum(latest.c.views).desc())
+    ).all()
+
+    result: list[TagAnalyticsItem] = []
+    for row in rows:
+        publications = int(row.publications)
+        views = int(row.views)
+        likes = int(row.likes)
+        comments = int(row.comments)
+        favorites = int(row.favorites)
+        shares = int(row.shares)
+        followers = int(row.followers)
+        avg_views, engagement_rate, favorite_rate, follower_conversion_rate = _rates(
+            publications,
+            views,
+            likes,
+            comments,
+            favorites,
+            shares,
+            followers,
+        )
+        result.append(
+            TagAnalyticsItem(
+                tag_id=row.id,
+                tag_name=row.name,
+                contents=int(row.contents),
                 publications=publications,
                 views=views,
                 likes=likes,
