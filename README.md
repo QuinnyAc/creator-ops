@@ -4,23 +4,27 @@
 
 Creator Ops helps individual creators and small content teams manage the full content production loop in one place:
 
-**Inspiration → Topic → Content → Publication → Metrics → Review → Better next topic**
+**Inspiration → Topic → Content → Publication → Metrics → Review → Insight → Better next topic**
 
-It is intentionally not another generic Notion-style database. The product understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, and the learning produced by a review.
+It is intentionally not another generic Notion-style database. The product understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, the learning produced by a review, and the reusable insight that should influence the next creation cycle.
 
 ## Current MVP
 
-The repository now includes a working first-pass product architecture for:
+The repository now includes a working first-pass creator operations product for:
 
 - low-friction inspiration inbox;
-- structured topic database and weighted topic scoring;
+- structured Topic Library with weighted topic scoring;
+- keyword, Content Pillar, status, and Tag filtering for growing topic databases;
 - tags attached to topics and content assets;
 - content production Kanban and per-content workspace;
 - multi-platform account and publication management;
 - monthly publishing calendar;
 - manual metric snapshots and 24h / 72h / 7d / 30d milestones;
-- Content Pillar performance analytics;
-- structured content reviews;
+- Content Pillar and platform performance analytics;
+- title-pattern analysis for packaging learnings;
+- data-assisted structured content reviews;
+- Creator Insights / Playbook promoted from review learnings;
+- CSV import and export workflows;
 - dashboard summaries;
 - email/password registration and JWT authentication;
 - Docker-based local development;
@@ -48,7 +52,9 @@ Metric Snapshots
     ↓
 Review
     ↓
-Learning → Next Topic
+Insight / Creator Playbook
+    ↓
+Better next topic
 ```
 
 A single `Content` can have multiple `Publication` records. That is important because the same core idea may be adapted to several platforms with different titles, schedules, links, and performance data.
@@ -179,6 +185,7 @@ See [`docs/deployment.md`](docs/deployment.md) for the production checklist.
 
 - [x] Inspiration inbox
 - [x] Topic scoring
+- [x] Searchable/filterable Topic Library
 - [x] Content pipeline
 - [x] Content workspace
 - [x] Publication management
@@ -191,21 +198,36 @@ See [`docs/deployment.md`](docs/deployment.md) for the production checklist.
 ### P1 — creator analytics
 
 - [x] Content Pillar performance comparisons
+- [x] Platform performance comparisons
 - [x] 24h / 72h / 7d / 30d performance views
 - [x] Publishing calendar view
 - [x] Topic / content tag relationships
-- [ ] Title pattern analysis
-- [ ] CSV import / export
-- [ ] More API integration coverage
+- [x] Title pattern analysis
+- [x] CSV import / export
+- [x] Additional feature and integration coverage
+- [ ] Tag-level performance analytics
+- [ ] Richer trend and cohort analysis
 
 ### P2 — creator intelligence
 
-- [ ] Platform data integrations
-- [ ] AI-assisted review
+- [x] Data-assisted review suggestions with transparent rules
+- [x] Creator Playbook / reusable insights
 - [ ] AI topic scoring suggestions
-- [ ] Creator Playbook / reusable insights
+- [ ] Optional LLM-assisted review and insight synthesis
+- [ ] Platform data integrations
 - [ ] Team collaboration and roles
 - [ ] Browser extension and automation hooks
+
+## Release readiness
+
+The current codebase is an MVP foundation rather than a finished hosted SaaS. Before the first public release, the remaining work is mainly packaging and operations:
+
+- keep aggregate CI green;
+- configure a public demo deployment;
+- add real product screenshots and a social preview image;
+- finalize logo assets and brand usage;
+- publish a first tagged GitHub release;
+- document upgrade notes once the database schema starts evolving across public versions.
 
 ## Open source
 
