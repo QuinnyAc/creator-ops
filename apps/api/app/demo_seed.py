@@ -19,6 +19,7 @@ from app.models import (
     Tag,
     Topic,
     TopicScore,
+    User,
     content_tags,
     topic_tags,
 )
@@ -271,11 +272,6 @@ def _ensure_snapshot(
 def seed_demo(db: Session) -> None:
     if settings.app_env == "production":
         raise RuntimeError("Demo seed is disabled when APP_ENV=production.")
-
-    user_exists = db.scalar(select(1).where(select(1).exists().where()))
-    # The local creator is created by migration 0002. Resolve it explicitly so a
-    # missing migration fails with an actionable error rather than an FK error.
-    from app.models import User
 
     user = db.scalar(select(User).where(User.id == DEFAULT_USER_ID))
     if user is None:
