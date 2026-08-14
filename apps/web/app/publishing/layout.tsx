@@ -83,6 +83,42 @@ export default function PublishingLayout({ children }: { children: ReactNode }) 
   }, [showAccountManager]);
 
   const platformMap = useMemo(() => new Map(platforms.map((item) => [item.id, item])), [platforms]);
+  const accountMap = useMemo(() => new Map(accounts.map((item) => [item.id, item])), [accounts]);
+
+  useEffect(() => {
+    if (!showAccountManager) return;
+
+    async function autoSyncBilibili() {
+      const connectedAccountIds = new Set(
+        Object.entries(bilibiliStatus)
+          .filter(([, value]) => value.connected)
+          .map(([accountId]) => accountId),
+      );
+      if (connectedAccountIds.size === 0) return;
+
+      const targets = publications.filter((publication) => {
+        if (!publication.url || publication.status !== "published") return false;
+        if (!connectedAccountIds.has(publication.platform_account_id)) return false;
+        const account = accountMap.get(publication.platform_account_id);
+        const platform = account ? platformMap.get(account.platform_id) : undefined;
+        return platform?.slug === "bilibili";
+      });
+      if (targets.length === 0) return;
+
+      await Promise.all(
+        targets.map((publication) =>
+          api<unknown>(`/publications/${publication.id}/sync-metrics`, { method: "POST" }).catch(() => null),
+        ),
+      );
+    }
+
+    const initial = window.setTimeout(() => void autoSyncBilibili(), 8_000);
+    const timer = window.setInterval(() => void autoSyncBilibili(), 5 * 60_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+    };
+  }, [showAccountManager, bilibiliStatus, publications, accountMap, platformMap]);
 
   async function connectBilibili(account: PlatformAccount) {
     setConnectingId(account.id);
@@ -131,7 +167,7 @@ export default function PublishingLayout({ children }: { children: ReactNode }) 
           {error ? <ErrorBanner message={error.trim()} /> : null}
           <Section
             title={`账号管理 · ${accounts.length}`}
-            description="B站账号可连接官方开放平台 API；小红书暂时继续使用手动数据快照。"
+            description="B站账号可连接官方开放平台 API；连接后，发布管理页面打开期间每 5 分钟自动同步一次已发布视频。小红书暂时继续使用手动数据快照。"
           >
             {accounts.length === 0 ? (
               <EmptyState>还没有平台账号。</EmptyState>
@@ -140,7 +176,7 @@ export default function PublishingLayout({ children }: { children: ReactNode }) 
                 {accounts.map((account) => {
                   const platform = platformMap.get(account.platform_id);
                   const videoCount = publications.filter((item) => item.platform_account_id === account.id).length;
-                  const status = bilibiliStatus[account.id];
+                  const apiStatus = bilibiliStatus[account.id];
                   const isBilibili = platform?.slug === "bilibili";
                   return (
                     <div className="dataRow" key={account.id} style={{ alignItems: "flex-start" }}>
@@ -149,19 +185,19 @@ export default function PublishingLayout({ children }: { children: ReactNode }) 
                         <div className="dataRowMeta">
                           {platform?.name ?? "平台"}{account.handle ? ` · ${account.handle}` : ""} · {videoCount} 条视频记录
                         </div>
-                        {isBilibili && status ? (
+                        {isBilibili && apiStatus ? (
                           <div style={{ marginTop: 8, display: "grid", gap: 5 }}>
                             <div className="dataRowMeta">
-                              API 状态：{status.connected ? "已连接" : status.configured ? "等待账号授权" : "等待配置开放平台凭据"}
+                              API 状态：{apiStatus.connected ? "已连接 · 自动同步已开启" : apiStatus.configured ? "等待账号授权" : "等待配置开放平台凭据"}
                             </div>
                             <div className="dataRowMeta" style={{ overflowWrap: "anywhere" }}>
-                              授权回调地址：{status.callback_url}
+                              授权回调地址：{apiStatus.callback_url}
                             </div>
                             <button
                               className="button small ghost"
                               type="button"
                               style={{ width: "fit-content" }}
-                              onClick={() => void copyCallback(status.callback_url)}
+                              onClick={() => void copyCallback(apiStatus.callback_url)}
                             >
                               复制回调地址
                             </button>
@@ -171,15 +207,15 @@ export default function PublishingLayout({ children }: { children: ReactNode }) 
                         ) : null}
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        {isBilibili && status ? (
+                        {isBilibili && apiStatus ? (
                           <button
                             className="button small"
                             type="button"
-                            disabled={!status.configured || connectingId === account.id}
+                            disabled={!apiStatus.configured || connectingId === account.id}
                             onClick={() => void connectBilibili(account)}
-                            title={!status.configured ? "请先配置 B站开放平台 Client ID 和 App Secret" : undefined}
+                            title={!apiStatus.configured ? "请先配置 B站开放平台 Client ID 和 App Secret" : undefined}
                           >
-                            {connectingId === account.id ? "连接中…" : status.connected ? "重新授权B站 API" : "连接B站 API"}
+                            {connectingId === account.id ? "连接中…" : apiStatus.connected ? "重新授权B站 API" : "连接B站 API"}
                           </button>
                         ) : null}
                         <button className="button small danger" type="button" onClick={() => void deleteAccount(account)}>
