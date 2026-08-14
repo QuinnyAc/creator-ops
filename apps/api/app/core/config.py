@@ -5,6 +5,9 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_DEV_JWT_SECRET = "creator-ops-development-secret-change-before-production"
+
+
 class Settings(BaseSettings):
     app_name: str = "Creator Ops API"
     app_env: str = "development"
@@ -15,7 +18,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     default_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     allow_dev_user_fallback: bool = True
-    jwt_secret_key: str = "development-only-change-me"
+    jwt_secret_key: str = DEFAULT_DEV_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
 
@@ -34,7 +37,7 @@ class Settings(BaseSettings):
         if self.app_env == "production":
             if self.allow_dev_user_fallback:
                 raise ValueError("ALLOW_DEV_USER_FALLBACK must be false in production.")
-            if self.jwt_secret_key == "development-only-change-me":
+            if self.jwt_secret_key == DEFAULT_DEV_JWT_SECRET:
                 raise ValueError("JWT_SECRET_KEY must be changed in production.")
         return self
 
