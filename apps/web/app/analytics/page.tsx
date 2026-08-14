@@ -13,6 +13,7 @@ import type {
   PillarTrendItem,
   PlatformAnalyticsItem,
   Publication,
+  TagAnalyticsItem,
 } from "@/lib/types";
 
 const TREND_LABELS: Record<PillarTrendItem["signal"], string> = {
@@ -44,6 +45,7 @@ export default function AnalyticsPage() {
   const [pillarAnalytics, setPillarAnalytics] = useState<PillarAnalyticsItem[]>([]);
   const [pillarTrends, setPillarTrends] = useState<PillarTrendItem[]>([]);
   const [platformAnalytics, setPlatformAnalytics] = useState<PlatformAnalyticsItem[]>([]);
+  const [tagAnalytics, setTagAnalytics] = useState<TagAnalyticsItem[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -61,11 +63,12 @@ export default function AnalyticsPage() {
 
   const loadOverview = useCallback(async () => {
     try {
-      const [nextSummary, nextPillars, nextTrends, nextPlatforms, nextPublications, nextContents] = await Promise.all([
+      const [nextSummary, nextPillars, nextTrends, nextPlatforms, nextTags, nextPublications, nextContents] = await Promise.all([
         api<AnalyticsSummary>("/analytics/summary"),
         api<PillarAnalyticsItem[]>("/analytics/pillars"),
         api<PillarTrendItem[]>("/analytics/pillar-trends?window_days=30"),
         api<PlatformAnalyticsItem[]>("/analytics/platforms"),
+        api<TagAnalyticsItem[]>("/analytics/tags"),
         api<Publication[]>("/publications"),
         api<ContentItem[]>("/contents"),
       ]);
@@ -73,6 +76,7 @@ export default function AnalyticsPage() {
       setPillarAnalytics(nextPillars);
       setPillarTrends(nextTrends);
       setPlatformAnalytics(nextPlatforms);
+      setTagAnalytics(nextTags);
       setPublications(nextPublications);
       setContents(nextContents);
       setSelectedId((current) => current || nextPublications[0]?.id || "");
@@ -223,6 +227,34 @@ export default function AnalyticsPage() {
                 {platformAnalytics.map((item) => (
                   <tr key={item.platform_id}>
                     <td><div className="tableTitle">{item.platform_name}</div><div className="dataRowMeta">{item.platform_slug}</div></td>
+                    <td>{item.publications}</td>
+                    <td>{formatNumber(Math.round(item.avg_views))}</td>
+                    <td className="score">{item.engagement_rate}%</td>
+                    <td className="score">{item.favorite_rate}%</td>
+                    <td className="score high">{item.follower_conversion_rate}%</td>
+                    <td>{formatNumber(item.views)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
+
+      <Section title="哪些主题标签值得继续做？" description="按 Content 标签聚合最新发布快照。一个 Content 可以属于多个标签，因此这里用于比较主题特征，不与总量做加总对账。">
+        {tagAnalytics.length === 0 ? (
+          <EmptyState>给 Content 添加标签并记录发布数据后，这里会显示标签层面的浏览、收藏和转粉效率。</EmptyState>
+        ) : (
+          <div className="tableWrap">
+            <table className="table">
+              <thead><tr><th>标签</th><th>内容</th><th>发布</th><th>平均浏览</th><th>互动率</th><th>收藏率</th><th>转粉率</th><th>总浏览</th></tr></thead>
+              <tbody>
+                {tagAnalytics.map((item) => (
+                  <tr key={item.tag_id}>
+                    <td><div className="tableTitle">#{item.tag_name}</div></td>
+                    <td>{item.contents}</td>
                     <td>{item.publications}</td>
                     <td>{formatNumber(Math.round(item.avg_views))}</td>
                     <td className="score">{item.engagement_rate}%</td>

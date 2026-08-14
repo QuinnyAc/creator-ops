@@ -15,6 +15,7 @@ from app.api.routes import (
     review_assistant,
     reviews,
     settings,
+    tag_analytics,
     title_analytics,
     topics,
     trend_analytics,
@@ -29,6 +30,7 @@ api_router.include_router(topics.router)
 api_router.include_router(contents.router)
 api_router.include_router(publishing.router)
 api_router.include_router(analytics.router)
+api_router.include_router(tag_analytics.router)
 api_router.include_router(title_analytics.router)
 api_router.include_router(trend_analytics.router)
 api_router.include_router(recommendations.router)
