@@ -1,0 +1,97 @@
+name: Finalize restore semantics
+
+on:
+  push:
+    branches:
+      - ops/database-backup-restore
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-restore-semantics
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Make restore recreate the public schema
+        shell: python
+        run: |
+          from pathlib import Path
+
+          restore = Path("scripts/restore-postgres.sh")
+          text = restore.read_text()
+          old = '''echo "Restoring PostgreSQL from: ${BACKUP_PATH}"
+          "${compose[@]}" exec -T db sh -ceu '\n  pg_restore \\\n    --username "$POSTGRES_USER" \\\n    --dbname "$POSTGRES_DB" \\\n    --clean \\\n    --if-exists \\\n    --no-owner \\\n    --no-privileges \\\n    --exit-on-error\n' < "${BACKUP_PATH}"
+          '''
+          new = '''echo "Resetting the public schema before restore..."
+          "${compose[@]}" exec -T db sh -ceu '\n  psql \\\n    --username "$POSTGRES_USER" \\\n    --dbname "$POSTGRES_DB" \\\n    -v ON_ERROR_STOP=1 \\\n    -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"\n'
+
+          echo "Restoring PostgreSQL from: ${BACKUP_PATH}"
+          "${compose[@]}" exec -T db sh -ceu '\n  pg_restore \\\n    --username "$POSTGRES_USER" \\\n    --dbname "$POSTGRES_DB" \\\n    --no-owner \\\n    --no-privileges \\\n    --exit-on-error\n' < "${BACKUP_PATH}"
+          '''
+          if old not in text:
+              raise SystemExit("Expected restore block not found; inspect branch before retrying")
+          restore.write_text(text.replace(old, new))
+
+          docs = Path("docs/backups.md")
+          text = docs.read_text()
+          text = text.replace(
+              "4. runs `pg_restore --clean --if-exists` inside the database container;\n5. restarts API and Web on exit;\n6. relies on normal API startup to apply any migrations newer than the restored database.",
+              "4. drops and recreates the PostgreSQL `public` schema so objects added after the backup cannot survive the restore;\n5. restores the custom-format dump into the clean schema;\n6. restarts API and Web on exit;\n7. relies on normal API startup to apply any migrations newer than the restored database.",
+          )
+          docs.write_text(text)
+
+          smoke = Path(".github/workflows/backup-restore-smoke.yml")
+          text = smoke.read_text()
+          marker = '''      - name: Destroy marker after backup
+        run: >-
+          docker compose exec -T db sh -ceu
+          'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+          -v ON_ERROR_STOP=1
+          -c "DROP TABLE backup_restore_smoke;"'
+'''
+          replacement = marker + '''      - name: Create a post-backup object that must not survive restore
+        run: >-
+          docker compose exec -T db sh -ceu
+          'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"
+          -v ON_ERROR_STOP=1
+          -c "CREATE TABLE post_backup_stale_object (id integer PRIMARY KEY);"'
+'''
+          if marker not in text:
+              raise SystemExit("Expected smoke-test marker block not found")
+          text = text.replace(marker, replacement)
+          verify = '''      - name: Verify restored marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          value="$(docker compose exec -T db sh -ceu 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atc "SELECT value FROM backup_restore_smoke WHERE id = 1;"')"
+          test "$value" = "creator-ops-backup-ok"
+'''
+          verify_new = verify + '''      - name: Verify post-backup objects were removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          stale="$(docker compose exec -T db sh -ceu 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atc "SELECT to_regclass($$public.post_backup_stale_object$$);"')"
+          test -z "$stale"
+'''
+          if verify not in text:
+              raise SystemExit("Expected restore verification block not found")
+          smoke.write_text(text.replace(verify, verify_new))
+      - name: Remove one-time finalizer
+        run: rm .github/workflows/finalize-restore-semantics.yml
+      - name: Commit finalized restore behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "ops: restore backups into a clean PostgreSQL schema"
+          git push
