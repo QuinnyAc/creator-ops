@@ -24,7 +24,7 @@ from app.models_insights import Insight
 from app.services.scoring import calculate_topic_scores
 
 DEMO_MARKER = "Demo · AI Tools"
-PLATFORM_SLUGS = {"xiaohongshu", "bilibili", "wechat_official", "youtube"}
+PLATFORM_SLUGS = {"xiaohongshu", "bilibili"}
 
 
 def _topic_score(topic: Topic, **values: int) -> TopicScore:
@@ -82,7 +82,7 @@ def seed_demo() -> None:
             )
         )
         if exists is not None:
-            print("Creator Ops demo data already exists; nothing changed.")
+            print("Quinny demo data already exists; nothing changed.")
             return
 
         platforms = {
@@ -170,7 +170,7 @@ def seed_demo() -> None:
                 angle="Topic → Content → Publication → Metrics → Review",
                 goal="brand",
                 status="evaluating",
-                planned_platforms=["bilibili", "youtube"],
+                planned_platforms=["bilibili", "xiaohongshu"],
             ),
             "title": Topic(
                 user_id=user.id,
@@ -182,7 +182,7 @@ def seed_demo() -> None:
                 angle="标题模式 + 数据对比",
                 goal="engagement",
                 status="scheduled",
-                planned_platforms=["youtube", "xiaohongshu"],
+                planned_platforms=["bilibili", "xiaohongshu"],
             ),
         }
         db.add_all(topics.values())
@@ -350,9 +350,9 @@ def seed_demo() -> None:
             ),
             "title_scheduled": Publication(
                 content_id=contents["title"].id,
-                platform_account_id=accounts["youtube"].id,
-                title="7 AI Title Formulas: What Actually Gets Saved?",
-                platform_tags=["creator", "AI", "titles"],
+                platform_account_id=accounts["bilibili"].id,
+                title="7 个 AI 标题公式：哪些真的值得收藏？",
+                platform_tags=["自媒体", "AI", "标题"],
                 status="scheduled",
                 scheduled_at=now + timedelta(days=3),
             ),
@@ -405,7 +405,7 @@ def seed_demo() -> None:
         )
 
         db.commit()
-        print("Creator Ops demo data seeded successfully.")
+        print("Quinny demo data seeded successfully.")
         print("Open http://localhost:3000 to explore the populated workspace.")
 
 
