@@ -10,9 +10,18 @@ import type {
   MetricSnapshot,
   PerformanceMilestone,
   PillarAnalyticsItem,
+  PillarTrendItem,
   PlatformAnalyticsItem,
   Publication,
 } from "@/lib/types";
+
+const TREND_LABELS: Record<PillarTrendItem["signal"], string> = {
+  rising: "上升",
+  stable: "稳定",
+  falling: "下降",
+  new: "新方向",
+  insufficient: "数据不足",
+};
 
 function localNow() {
   const date = new Date();
@@ -33,6 +42,7 @@ const EMPTY_SUMMARY: AnalyticsSummary = {
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [pillarAnalytics, setPillarAnalytics] = useState<PillarAnalyticsItem[]>([]);
+  const [pillarTrends, setPillarTrends] = useState<PillarTrendItem[]>([]);
   const [platformAnalytics, setPlatformAnalytics] = useState<PlatformAnalyticsItem[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [contents, setContents] = useState<ContentItem[]>([]);
@@ -51,15 +61,17 @@ export default function AnalyticsPage() {
 
   const loadOverview = useCallback(async () => {
     try {
-      const [nextSummary, nextPillars, nextPlatforms, nextPublications, nextContents] = await Promise.all([
+      const [nextSummary, nextPillars, nextTrends, nextPlatforms, nextPublications, nextContents] = await Promise.all([
         api<AnalyticsSummary>("/analytics/summary"),
         api<PillarAnalyticsItem[]>("/analytics/pillars"),
+        api<PillarTrendItem[]>("/analytics/pillar-trends?window_days=30"),
         api<PlatformAnalyticsItem[]>("/analytics/platforms"),
         api<Publication[]>("/publications"),
         api<ContentItem[]>("/contents"),
       ]);
       setSummary(nextSummary);
       setPillarAnalytics(nextPillars);
+      setPillarTrends(nextTrends);
       setPlatformAnalytics(nextPlatforms);
       setPublications(nextPublications);
       setContents(nextContents);
@@ -160,6 +172,38 @@ export default function AnalyticsPage() {
                     <td>{formatNumber(item.views)}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <div style={{ height: 16 }} />
+
+      <Section title="用户兴趣是否在变化？" description="最近 30 天与前 30 天对比。上升/下降以平均浏览变化达到 ±20% 为信号，同时保留收藏率供判断内容价值。">
+        {pillarTrends.length === 0 ? (
+          <EmptyState>至少需要带 Content Pillar、实际发布时间和数据快照的发布记录，才能判断兴趣变化。</EmptyState>
+        ) : (
+          <div className="tableWrap">
+            <table className="table">
+              <thead><tr><th>Content Pillar</th><th>趋势</th><th>最近 / 前期发布</th><th>最近平均浏览</th><th>前期平均浏览</th><th>浏览变化</th><th>最近收藏率</th></tr></thead>
+              <tbody>
+                {pillarTrends.map((item) => {
+                  const change = item.view_change_percent;
+                  const changeLabel = change == null ? "—" : `${change > 0 ? "+" : ""}${change}%`;
+                  const positive = item.signal === "rising" || item.signal === "new";
+                  return (
+                    <tr key={item.pillar_id}>
+                      <td><div className="tableTitle">{item.pillar_name}</div></td>
+                      <td className={`score ${positive ? "high" : ""}`}>{TREND_LABELS[item.signal]}</td>
+                      <td>{item.recent_publications} / {item.previous_publications}</td>
+                      <td>{formatNumber(Math.round(item.recent_avg_views))}</td>
+                      <td>{formatNumber(Math.round(item.previous_avg_views))}</td>
+                      <td className={`score ${change != null && change > 0 ? "high" : ""}`}>{changeLabel}</td>
+                      <td>{item.recent_favorite_rate}%</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
