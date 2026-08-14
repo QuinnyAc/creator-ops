@@ -1,0 +1,27 @@
+name: Dev container
+
+on:
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - "docs/codespaces.md"
+      - ".github/workflows/devcontainer.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate devcontainer JSON
+        run: python -m json.tool .devcontainer/devcontainer.json >/dev/null
+      - name: Validate post-create shell syntax
+        run: bash -n .devcontainer/post-create.sh
