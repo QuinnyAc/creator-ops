@@ -8,17 +8,19 @@ The local Swagger UI is available at `/docs` when the FastAPI service is running
 
 | Area | Main endpoints |
 | --- | --- |
-| Authentication | `/auth/register`, `/auth/login`, `/auth/me` |
+| Authentication / profile | `/auth/register`, `/auth/login`, `GET /auth/me`, `PATCH /auth/me` |
 | Dashboard | `/dashboard/summary` |
 | Content pillars | `/content-pillars` |
 | Tags | `/tags` |
 | Inspirations | `/inspirations`, `/inspirations/{id}/convert` |
 | Topics | `/topics`, `/topics/{id}/score`, `/topics/{id}/tags` |
+| Topic recommendations | `/recommendations/topics` |
 | Content | `/contents`, `/contents/{id}/tags` |
 | Platforms | `/platforms` |
 | Platform accounts | `/platform-accounts` |
 | Publications | `/publications` |
 | Analytics overview | `/analytics/summary`, `/analytics/pillars`, `/analytics/platforms` |
+| Tag analytics | `/analytics/tags` |
 | Interest trends | `/analytics/pillar-trends?window_days=30` |
 | Title analysis | `/analytics/title-patterns` |
 | Publication metrics | `/analytics/publications/{publication_id}/metrics` |
@@ -29,13 +31,24 @@ The local Swagger UI is available at `/docs` when the FastAPI service is running
 | CSV exports | `/exports/topics.csv`, `/exports/contents.csv`, `/exports/publications.csv`, `/exports/reviews.csv`, `/exports/insights.csv` |
 | Metric CSV import | `/imports/metrics.csv` |
 
-## Authentication
+## Authentication and creator profile
 
 Registered users receive a signed Bearer JWT access token. Authenticated clients send it as:
 
 ```http
 Authorization: Bearer <access-token>
 ```
+
+`GET /auth/me` returns the current creator profile. `PATCH /auth/me` updates creator-level workspace settings currently including:
+
+```json
+{
+  "display_name": "Creator name",
+  "timezone": "Asia/Shanghai"
+}
+```
+
+The timezone is persisted as the workspace-level source of truth for publishing/calendar features and future scheduling automation.
 
 For local development, `ALLOW_DEV_USER_FALLBACK=true` keeps the seeded creator workspace usable without first creating an account. This fallback is rejected when `APP_ENV=production`.
 
@@ -56,6 +69,22 @@ Content
 This lets one reusable content asset have different titles, schedules, URLs, and performance on different platforms.
 
 `/analytics/pillar-trends` compares published content in a recent time window against the immediately preceding window. The default is recent 30 days versus the previous 30 days. A ±20% change in average views is currently used as the transparent trend threshold.
+
+## Evidence-backed topic recommendations
+
+`GET /recommendations/topics` ranks already-scored candidate Topics without changing their original human score.
+
+The recommendation layer keeps two values separate:
+
+```text
+Human Priority Score
+        +
+Transparent evidence adjustment
+        =
+Recommended Score
+```
+
+Current evidence includes Content Pillar historical average views, favorite rate, and recent-vs-previous trend signals. The response includes the exact reasons for every adjustment so the ranking is inspectable instead of acting like an opaque AI score.
 
 ## Data-assisted review
 
@@ -107,4 +136,4 @@ views,likes,comments,favorites,shares,followers_gained,extra_metrics
 
 ## Data ownership
 
-Creator-owned resources are filtered using the current user ID. Platform catalog rows are global, while platform accounts and all creator workflow data belong to a user. Import, export, analytics, reviews, and Playbook endpoints preserve the same ownership boundary.
+Creator-owned resources are filtered using the current user ID. Platform catalog rows are global, while platform accounts and all creator workflow data belong to a user. Import, export, analytics, reviews, recommendations, and Playbook endpoints preserve the same ownership boundary.
