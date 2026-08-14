@@ -110,7 +110,7 @@ export default function IdeaMemoPage() {
               className="input"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="例如：绿帘石视频开头灵感"
+              placeholder="例如：前三秒开头创意"
               maxLength={240}
             />
           </div>
