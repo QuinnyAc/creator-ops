@@ -17,6 +17,17 @@ def test_register_login_and_authenticated_me() -> None:
     user_id: str | None = None
 
     try:
+        invalid_timezone_response = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"invalid-zone-{suffix}@example.com",
+                "display_name": "Invalid Timezone Creator",
+                "password": password,
+                "timezone": "Mars/Olympus_Mons",
+            },
+        )
+        assert invalid_timezone_response.status_code == 422
+
         register_response = client.post(
             "/api/v1/auth/register",
             json={
@@ -50,6 +61,13 @@ def test_register_login_and_authenticated_me() -> None:
         assert profile_response.status_code == 200, profile_response.text
         assert profile_response.json()["display_name"] == "Updated Integration Creator"
         assert profile_response.json()["timezone"] == "Asia/Singapore"
+
+        invalid_profile_timezone = client.patch(
+            "/api/v1/auth/me",
+            headers=auth_headers,
+            json={"timezone": "Invalid/Timezone"},
+        )
+        assert invalid_profile_timezone.status_code == 422
 
         persisted_profile = client.get("/api/v1/auth/me", headers=auth_headers)
         assert persisted_profile.status_code == 200, persisted_profile.text
