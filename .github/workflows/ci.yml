@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: creator_ops
+          POSTGRES_USER: creator_ops
+          POSTGRES_PASSWORD: creator_ops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U creator_ops -d creator_ops"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://creator_ops:creator_ops@localhost:5432/creator_ops
+      APP_ENV: test
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: pip install -e ".[dev]"
+      - name: Compile Python
+        run: python -m compileall app tests
+      - name: Test migrations
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+      - name: Run tests
+        run: pytest
+      - name: Verify demo seed is executable and idempotent
+        run: |
+          python -m app.demo_seed
+          python -m app.demo_seed
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend
+        run: npm install
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+
+  containers:
+    name: Production containers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose config
+        env:
+          POSTGRES_PASSWORD: ci-production-password
+          JWT_SECRET_KEY: ci-production-jwt-secret-at-least-32-bytes
+          CORS_ORIGINS: https://creator.example.com
+          NEXT_PUBLIC_API_URL: https://api.creator.example.com
+        run: docker compose -f docker-compose.prod.yml config >/dev/null
+      - name: Build API production image
+        run: docker build -f apps/api/Dockerfile.prod -t creator-ops-api:ci apps/api
+      - name: Build web production image
+        run: >-
+          docker build
+          --build-arg NEXT_PUBLIC_API_URL=https://api.creator.example.com
+          --build-arg NEXT_PUBLIC_REQUIRE_AUTH=true
+          -f apps/web/Dockerfile.prod
+          -t creator-ops-web:ci
+          apps/web

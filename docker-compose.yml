@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-creator_ops}
+      POSTGRES_USER: ${POSTGRES_USER:-creator_ops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-creator_ops}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - creator_ops_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-creator_ops} -d ${POSTGRES_DB:-creator_ops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-creator_ops}:${POSTGRES_PASSWORD:-creator_ops}@db:5432/${POSTGRES_DB:-creator_ops}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ALLOW_DEV_USER_FALLBACK: ${ALLOW_DEV_USER_FALLBACK:-true}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-development-only-change-me}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_REQUIRE_AUTH: ${NEXT_PUBLIC_REQUIRE_AUTH:-false}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app
+      - creator_ops_web_node_modules:/app/node_modules
+    command: npm run dev
+
+volumes:
+  creator_ops_postgres:
+  creator_ops_web_node_modules:
