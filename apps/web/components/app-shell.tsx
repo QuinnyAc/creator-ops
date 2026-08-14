@@ -25,6 +25,7 @@ const nav = [
   { href: "/analytics", label: "数据分析", icon: ChartIcon },
   { href: "/analytics/titles", label: "标题分析", icon: ChartIcon },
   { href: "/reviews", label: "内容复盘", icon: ReviewIcon },
+  { href: "/insights", label: "Creator Playbook", icon: SparkIcon },
   { href: "/settings", label: "设置", icon: SettingsIcon },
 ];
 
