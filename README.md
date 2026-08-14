@@ -8,6 +8,8 @@ Creator Ops helps individual creators and small content teams manage the full co
 
 It is intentionally not another generic Notion-style database. Creator Ops understands the domain relationship between a topic, a reusable content asset, each platform-specific publication, its time-series metrics, the review produced from those results, and the reusable creator knowledge that should influence the next decision.
 
+**Explore:** [Product Tour](docs/product-tour.md) · [60-second demo](#60-second-demo) · [Codespaces](docs/codespaces.md) · [Deployment](docs/deployment.md) · [API](docs/api.md)
+
 ## Why Creator Ops
 
 Generic databases are excellent at storing rows. Creator Ops is opinionated about the creator workflow:
@@ -20,6 +22,24 @@ Generic databases are excellent at storing rows. Creator Ops is opinionated abou
 - compare Content Pillars, Tags, platforms, title patterns, and recent interest changes;
 - rank the next topics using both human judgment and the creator's own performance evidence;
 - turn a one-off review into a reusable Creator Playbook insight.
+
+## Product screenshots
+
+Screenshots below are generated from the real application using the repository's reproducible demo dataset.
+
+### Decide what to make next
+
+![Creator Ops Topic Library](docs/screenshots/topics.png)
+
+### Operate the production pipeline
+
+![Creator Ops Content Pipeline](docs/screenshots/content-pipeline.png)
+
+### Learn from performance
+
+![Creator Ops Analytics](docs/screenshots/analytics.png)
+
+See the [full Product Tour](docs/product-tour.md) for Dashboard, publishing calendar, analytics, and Creator Playbook screenshots.
 
 ## 60-second demo
 
@@ -45,13 +65,17 @@ The demo seed is development-only and intentionally populates a realistic creato
 - data that produces meaningful platform, tag, title, and trend analytics;
 - Reviews and a Creator Playbook Insight.
 
-Running `make demo` again is safe: the seed is idempotent. The CI pipeline executes it twice on PostgreSQL to verify that property.
+Running `make demo` again is safe: the seed is idempotent. CI executes it twice on PostgreSQL to verify that property.
 
 To delete all local data and start again:
 
 ```bash
 make reset
 ```
+
+### Browser-hosted demo environment
+
+Creator Ops also ships a GitHub Dev Container. From the repository page choose **Code → Codespaces → Create codespace**, then run `make dev` and `make demo`. Open forwarded port `3000` to use the same workspace in your browser. See [GitHub Codespaces](docs/codespaces.md).
 
 ## Current MVP
 
@@ -77,8 +101,11 @@ The repository includes a working end-to-end product foundation for:
 - Creator Playbook / reusable Insights promoted from Review learnings;
 - dashboard summaries and evidence-backed topic recommendations;
 - email/password registration and JWT authentication;
+- tenant-isolated creator-owned data boundaries;
 - development and production Docker stacks;
-- PostgreSQL migrations and GitHub Actions CI.
+- PostgreSQL backup / clean-schema restore tooling with a real CI restore proof;
+- reproducible npm installs with a committed lockfile and high-severity audit gate;
+- PostgreSQL migrations, GitHub Actions CI, CodeQL, Dependabot, and release automation.
 
 Initial platform catalog:
 
@@ -137,7 +164,7 @@ The first review assistant and topic recommendation engine are deliberately rule
 | Authentication | Argon2 password hashing + signed JWT |
 | Local runtime | Docker Compose |
 | Production packaging | Multi-stage Docker images + production Compose |
-| CI | GitHub Actions |
+| CI / security | GitHub Actions + CodeQL + npm audit + Dependabot |
 
 ## Repository structure
 
@@ -146,8 +173,10 @@ creator-ops/
 ├── apps/
 │   ├── web/                 # Next.js creator workspace
 │   └── api/                 # FastAPI REST API
-├── docs/                    # Architecture, database, API, deployment and brand docs
-├── .github/                 # CI, issue templates and PR template
+├── scripts/                 # database backup / restore operations
+├── docs/                    # product, architecture, API and operations docs
+├── .devcontainer/           # GitHub Codespaces environment
+├── .github/                 # CI, security, release and contribution automation
 ├── docker-compose.yml       # development stack
 ├── docker-compose.prod.yml  # production-style stack
 ├── Makefile
@@ -197,7 +226,7 @@ npm ci
 npm run dev
 ```
 
-## Test
+## Test and release gates
 
 Backend:
 
@@ -210,15 +239,19 @@ Frontend:
 
 ```bash
 cd apps/web
+npm ci
+npm audit --audit-level=high
 npm run typecheck
 npm run build
 ```
 
-GitHub Actions validates three release-critical lanes:
+GitHub automation protects the release with:
 
-1. **Backend** — Python compilation, Alembic upgrade → downgrade → upgrade, pytest, and the development demo seed executed twice.
-2. **Frontend** — TypeScript typecheck and Next.js production build.
-3. **Production containers** — production Compose validation plus production API and Web Docker image builds.
+1. **Backend CI** — Python compilation, Alembic upgrade → downgrade → upgrade, pytest, and demo seed idempotence.
+2. **Frontend CI** — reproducible `npm ci`, high-severity dependency audit, TypeScript typecheck, and Next.js production build.
+3. **Production containers** — production Compose validation plus API and Web image builds.
+4. **CodeQL** — static security scanning.
+5. **Backup restore smoke** — a real PostgreSQL backup → mutation → clean-schema restore → verification cycle.
 
 ## Production-style deployment
 
@@ -247,7 +280,23 @@ The production stack:
 - includes service health checks;
 - runs Alembic migrations before the API starts.
 
-See [`docs/deployment.md`](docs/deployment.md) for the production checklist and reverse-proxy guidance.
+See [Production deployment](docs/deployment.md) for the full checklist.
+
+## Backup and restore
+
+Create a PostgreSQL custom-format backup:
+
+```bash
+make backup
+```
+
+Restore requires an explicit backup path and confirmation guard:
+
+```bash
+make restore BACKUP=backups/creator-ops-YYYYMMDDTHHMMSSZ.dump
+```
+
+The restore path stops application writes, recreates the PostgreSQL `public` schema, restores the historical dump, and restarts application services. See [PostgreSQL backup and restore](docs/backups.md) before using it on production data.
 
 ## Data ownership
 
@@ -268,11 +317,16 @@ The API refuses to boot in production with unsafe development authentication def
 
 ## Documentation
 
+- [Product Tour](docs/product-tour.md)
 - [Architecture](docs/architecture.md)
 - [Database design](docs/database.md)
 - [API overview](docs/api.md)
 - [Production deployment](docs/deployment.md)
+- [PostgreSQL backup and restore](docs/backups.md)
+- [GitHub Codespaces](docs/codespaces.md)
+- [Security model](docs/security-model.md)
 - [Brand direction](docs/branding.md)
+- [v0.1.0 release checklist](docs/release-checklist.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
@@ -317,6 +371,8 @@ The API refuses to boot in production with unsafe development authentication def
 - [ ] Automated Insight confidence / validation over time
 - [ ] Team collaboration and roles
 - [ ] Browser extension and automation hooks
+
+P2 items are intentionally post-v0.1.0. The open-source release does not depend on proprietary platform APIs or an LLM to complete the core creator operations loop.
 
 ## Open source
 
