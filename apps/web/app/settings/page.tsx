@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 
 import { PlusIcon } from "@/components/icons";
 import { EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
@@ -15,6 +15,13 @@ const EXPORTS = [
   { key: "insights", label: "Creator Playbook", path: "/exports/insights.csv", filename: "creator-ops-insights.csv" },
 ];
 
+type MetricImportResult = {
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+};
+
 export default function SettingsPage() {
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -24,6 +31,8 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<MetricImportResult | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +109,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function importMetrics(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    setError("");
+    try {
+      const csvText = await file.text();
+      const result = await api<MetricImportResult>("/imports/metrics.csv", {
+        method: "POST",
+        headers: { "Content-Type": "text/csv" },
+        body: csvText,
+      });
+      setImportResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "指标 CSV 导入失败");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -136,24 +167,43 @@ export default function SettingsPage() {
 
       <div style={{ height: 16 }} />
 
-      <Section title="数据导出" description="Creator Ops 不锁定你的运营数据。随时导出 CSV，用于备份、分析或迁移到其他工具。">
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {EXPORTS.map((item) => (
-            <button
-              className="button secondary"
-              disabled={Boolean(exporting)}
-              key={item.key}
-              onClick={() => void exportCsv(item.key, item.path, item.filename)}
-              type="button"
-            >
-              {exporting === item.key ? "导出中…" : `导出 ${item.label}`}
-            </button>
-          ))}
-        </div>
-        <p className="dataRowMeta" style={{ marginTop: 12 }}>
-          CSV 使用 UTF-8 BOM，中文内容可以直接用 Excel、Numbers 或多维表格打开。
-        </p>
-      </Section>
+      <div className="twoColumns">
+        <Section title="数据导出" description="Creator Ops 不锁定你的运营数据。随时导出 CSV，用于备份、分析或迁移到其他工具。">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {EXPORTS.map((item) => (
+              <button
+                className="button secondary"
+                disabled={Boolean(exporting)}
+                key={item.key}
+                onClick={() => void exportCsv(item.key, item.path, item.filename)}
+                type="button"
+              >
+                {exporting === item.key ? "导出中…" : `导出 ${item.label}`}
+              </button>
+            ))}
+          </div>
+          <p className="dataRowMeta" style={{ marginTop: 12 }}>
+            CSV 使用 UTF-8 BOM，中文内容可以直接用 Excel、Numbers 或多维表格打开。
+          </p>
+        </Section>
+
+        <Section title="批量导入数据快照" description="从平台后台或表格整理后，一次导入多条 Publication 指标。相同 publication_id + captured_at 会更新而不是重复创建。">
+          <div className="field">
+            <label htmlFor="metrics-csv">选择 CSV 文件</label>
+            <input id="metrics-csv" className="input" type="file" accept=".csv,text/csv" disabled={importing} onChange={(event) => void importMetrics(event)} />
+          </div>
+          <div className="dataRowMeta" style={{ marginTop: 10, lineHeight: 1.6 }}>
+            必填列：publication_id, captured_at。可选列：views, likes, comments, favorites, shares, followers_gained, extra_metrics。
+          </div>
+          {importing ? <p className="muted" style={{ marginTop: 12 }}>正在导入…</p> : null}
+          {importResult ? (
+            <div className="dataList" style={{ marginTop: 14 }}>
+              <div className="dataRow"><div><div className="dataRowTitle">导入完成</div><div className="dataRowMeta">新增 {importResult.imported} · 更新 {importResult.updated} · 跳过 {importResult.skipped}</div></div></div>
+              {importResult.errors.slice(0, 5).map((message) => <div className="dataRow" key={message}><div className="dataRowMeta">{message}</div></div>)}
+            </div>
+          ) : null}
+        </Section>
+      </div>
     </>
   );
 }
