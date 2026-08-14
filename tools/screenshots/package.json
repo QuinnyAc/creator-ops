@@ -1,0 +1,8 @@
+{
+  "name": "creator-ops-screenshot-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.55.0"
+  }
+}
