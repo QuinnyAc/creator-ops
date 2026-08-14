@@ -4,8 +4,15 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { PlusIcon } from "@/components/icons";
 import { EmptyState, ErrorBanner, PageHeader, Section } from "@/components/ui";
-import { api, postJson } from "@/lib/api";
+import { api, downloadApiFile, postJson } from "@/lib/api";
 import type { ContentPillar, Tag } from "@/lib/types";
+
+const EXPORTS = [
+  { key: "topics", label: "选题 + 评分", path: "/exports/topics.csv", filename: "creator-ops-topics.csv" },
+  { key: "contents", label: "内容资产", path: "/exports/contents.csv", filename: "creator-ops-contents.csv" },
+  { key: "publications", label: "发布 + 最新数据", path: "/exports/publications.csv", filename: "creator-ops-publications.csv" },
+  { key: "reviews", label: "内容复盘", path: "/exports/reviews.csv", filename: "creator-ops-reviews.csv" },
+];
 
 export default function SettingsPage() {
   const [pillars, setPillars] = useState<ContentPillar[]>([]);
@@ -15,6 +22,7 @@ export default function SettingsPage() {
   const [tagName, setTagName] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -79,6 +87,18 @@ export default function SettingsPage() {
     }
   }
 
+  async function exportCsv(key: string, path: string, filename: string) {
+    setExporting(key);
+    setError("");
+    try {
+      await downloadApiFile(path, filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "数据导出失败");
+    } finally {
+      setExporting("");
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -112,6 +132,27 @@ export default function SettingsPage() {
           {tags.length === 0 ? <EmptyState>还没有标签。</EmptyState> : <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{tags.map((tag) => <button className="button small secondary" title="点击删除" key={tag.id} onClick={() => void remove(`/tags/${tag.id}`)}>#{tag.name} ×</button>)}</div>}
         </Section>
       </div>
+
+      <div style={{ height: 16 }} />
+
+      <Section title="数据导出" description="Creator Ops 不锁定你的运营数据。随时导出 CSV，用于备份、分析或迁移到其他工具。">
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {EXPORTS.map((item) => (
+            <button
+              className="button secondary"
+              disabled={Boolean(exporting)}
+              key={item.key}
+              onClick={() => void exportCsv(item.key, item.path, item.filename)}
+              type="button"
+            >
+              {exporting === item.key ? "导出中…" : `导出 ${item.label}`}
+            </button>
+          ))}
+        </div>
+        <p className="dataRowMeta" style={{ marginTop: 12 }}>
+          CSV 使用 UTF-8 BOM，中文内容可以直接用 Excel、Numbers 或多维表格打开。
+        </p>
+      </Section>
     </>
   );
 }
